@@ -73,7 +73,7 @@ SELECT DISTINCT T.name FROM CatchedPokemon AS C, Trainer AS T WHERE C.owner_id =
 SELECT T.hometown, AVG(CP.level) FROM CatchedPokemon AS CP, Trainer AS T WHERE CP.owner_id = T.id GROUP BY T.hometown ORDER BY AVG(CP.level);
 
 # 25. 상록시티 출신 트레이너와 브라운시티 출신 트레이너가 공통으로 잡은 포켓몬의 이름을 사전순으로 출력하세요. ( 중복은 제거할 것 )
-SELECT P.name FROM Pokemon AS P, CatchedPokemon AS C, Trainer AS T WHERE P.id = C.pid and C.owner_id = T.id and T.hometown IN ('Sangnok City', 'Brown City') GROUP BY P.id HAVING COUNT(DISTINCT T.hometown) >= 2 ORDER BY P.name;
+SELECT DISTINCT P.name FROM Pokemon AS P, CatchedPokemon AS C, Trainer AS T WHERE P.id = C.pid and C.owner_id = T.id and T.hometown IN ('Sangnok City', 'Brown City') GROUP BY P.id HAVING COUNT(DISTINCT T.hometown) >= 2 ORDER BY P.name;
 
 # 26. 잡힌 포켓몬 중 닉네임에 공백이 들어가는 포켓몬의 이름을 사전식 내림차순으로 출력하세요.
 SELECT P.name FROM Pokemon AS P, CatchedPokemon AS C WHERE P.id = C.pid and C.nickname LIKE '%\ %' ORDER BY P.name DESC;
