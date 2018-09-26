@@ -15,7 +15,7 @@ SELECT nickname FROM CatchedPokemon WHERE level >= 50 ORDER BY nickname;
 # 5. 이름이 6글자인 포켓몬의 이름을 사전순으로 출력하세요.
 SELECT name FROM Pokemon WHERE LENGTH(name) = 6 ORDER BY name;
 
-# 6. Blue City 출신의 트레이너를 사전순으로 출력하세요.
+# 6. Blue City 출신의 트레이너의 이름을 사전순으로 출력하세요.
 SELECT name FROM Trainer WHERE hometown = 'Blue City' ORDER BY name;
 
 # 7. 트레이너의 고향 이름을 중복없이 사전순서대로 출력하세요.
@@ -37,10 +37,10 @@ SELECT id, name FROM Pokemon ORDER BY id;
 SELECT nickname FROM CatchedPokemon WHERE level <= 50 ORDER BY level;
 
 # 13. 상록시티 출신 트레이너가 가진 포켓몬들의 이름과 포켓몬ID를 포켓몬ID의 오름차순으로 정렬해 출력하세요.
-SELECT P.name, P.id FROM Trainer as T, Pokemon as P, CatchedPokemon as C WHERE T.hometown = 'Sangnok City' and P.id = C.pid GROUP BY P.id ORDER BY P.id;
+SELECT P.name, P.id FROM Trainer as T, Pokemon as P, CatchedPokemon as C WHERE P.id = C.pid and T.hometown = 'Sangnok City' GROUP BY P.id ORDER BY P.id;
 
 # 14. 모든 각 도시의 관장이 가진 포켓몬들 중 물포켓몬들의 별명을 별명에 오름차순으로 정렬해 출력하세요.
-SELECT C.nickname FROM Trainer AS T, CatchedPokemon AS C, Pokemon P WHERE T.id = C.owner_id and C.pid = P.id and P.type = "Water" ORDER BY C.nickname;
+SELECT C.nickname FROM Gym AS G, CatchedPokemon AS C, Pokemon P WHERE G.leader_id = C.owner_id and C.pid = P.id and P.type = "Water" ORDER BY C.nickname;
 
 # 15. 모든 잡힌 포켓몬들 중에서 진화가 가능한 포켓몬의 총 수를 출력하세요
 SELECT count(*) FROM Evolution AS E, CatchedPokemon AS C WHERE E.before_id = C.pid;
@@ -63,7 +63,7 @@ SELECT T.name, count(*) FROM Trainer AS T, CatchedPokemon AS C WHERE T.id = C.ow
 # 21. 포켓몬의 이름이 알파벳 모음으로 시작하는 포켓몬의 이름을 출력하세요.
 SELECT name FROM Pokemon WHERE name REGEXP '^(a|e|i|o|u)[:print:]*';
 
-# 22. 포켓몬의 타입과 해당 타입을 가지는 포켓몬의 수가 몇 마리인지를 출력하세요 수에대해 오름차순으로 출력하세요. ( 같은 수를 가진 경우 타입 명의 사전식 오름차순으로 정렬하세요.)
+# 22. 포켓몬의 타입과 해당 타입을 가지는 포켓몬의 수가 몇 마리인지를 출력하세요 수에 대해 오름차순으로 출력하세요. ( 같은 수를 가진 경우 타입 명의 사전식 오름차순으로 정렬하세요.)
 SELECT type, count(*) FROM Pokemon GROUP BY type ORDER BY count(*), type;
 
 # 23. 잡힌 포켓몬 중 레벨이 10이하인 포켓몬을 잡은 트레이너의 이름을 중복없이 사전순으로 출력하세요.
@@ -118,4 +118,4 @@ SELECT name FROM Pokemon WHERE id in ( SELECT after_id FROM Evolution WHERE befo
 SELECT T.name FROM Trainer AS T, CatchedPokemon AS CP WHERE T.id = CP.owner_id GROUP BY T.id HAVING COUNT(CP.pid) - COUNT(DISTINCT CP.pid) > 0 ORDER BY T.name;
 
 # 40. 출신 도시명과 각 출신 도시별로 트레이너가 잡은 가장 레벨이 높은 포켓몬의 별명을 출신 도시 명의 사전순으로 출력하세요.
-SELECT hometown, nickname FROM Trainer, CatchedPokemon WHERE ROW(hometown, level) in (SELECT T.hometown, MAX(CP.level) FROM Trainer AS T, CatchedPokemon AS CP WHERE T.id = CP.owner_id GROUP BY T.hometown) ORDER BY hometown;
+SELECT hometown, nickname FROM Trainer, CatchedPokemon WHERE ROW(hometown, level) in (SELECT T.hometown, MAX(CP.level) FROM Trainer AS T, CatchedPokemon AS CP WHERE T.id = CP.owner_id GROUP BY T.hometown) GROUP BY hometown, pid ORDER BY hometown;
