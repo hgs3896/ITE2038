@@ -1,5 +1,24 @@
 USE Pokemon;
 
+/*
+
+           _.-````'-,_
+   _,.,_ ,-'`           `'-.,_
+ /)     (\                   '``-.
+((      ) )                      `\
+ \)    (_/    HYU CSE :-)         )\
+  |       /)           '    ,'    / \
+  `\    ^'            '     (    /  ))
+    |      _/\ ,     /    ,,`\   (  "`
+     \Y,   |  \  \  | ````| / \_ \
+       `)_/    \  \  )    ( >  ( >
+                \( \(     |/   |/
+               /_(/_(    /_(  /_(        
+
+Division of Computer Software Engineering, Hanyang University
+
+*/
+
 # 1. 잡은 포켓몬이 3마리 이상인 트레이너의 이름을 잡은 포켓몬의 수가 많은 순서대로 출력하세요.
 SELECT T.name FROM Trainer AS T, CatchedPokemon AS C WHERE T.id = C.owner_id GROUP BY owner_id HAVING count(*) >= 3 ORDER BY count(*) DESC;
 
