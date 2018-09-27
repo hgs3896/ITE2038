@@ -1,4 +1,5 @@
 CREATE DATABASE Pokemon CHARACTER SET = utf8;
+
 USE Pokemon;
 
 CREATE TABLE Pokemon(
