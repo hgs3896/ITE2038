@@ -1,0 +1,304 @@
+name
+Red
+Green
+Matis
+Yellow
+name
+Blastoise
+Charizard
+Charmander
+Charmeleon
+Golduck
+Gyarados
+Horsea
+Lapras
+Magikarp
+Magmar
+Ninetales
+Psyduck
+Seadra
+Squirtle
+Vulpix
+Wartortle
+name
+Dodrio
+Doduo
+Golduck
+Horsea
+Porygon
+nickname
+AA
+After eating hot peppers
+Ahri
+Big yawn
+Donald Duck
+First friend
+Funny Smell
+Huge Battery
+Laputa
+Mouse
+Spoon killer
+Turtle
+Worm
+name
+Celebi
+Dodrio
+Horsea
+Lapras
+Magmar
+Mewtwo
+Raichu
+Seadra
+Vulpix
+name
+Gold
+Misty
+hometown
+Blue City
+Brown City
+Rainbow City
+Sangnok City
+AVG(level)
+69.0000
+nickname
+AA
+AAA
+After eating hot peppers
+Ahri
+Big yawn
+Chikorita
+Cho'gall
+Donald Duck
+First friend
+Fluffy
+Free Battery
+Funny Smell
+Huge Battery
+Laputa
+Mouse
+Mushroom
+Ninja Turtle
+Piece of cake
+Salad
+Small Battery
+Spoon killer
+Water gun
+Worm
+nickname
+Huge Battery
+Laputa
+Worm
+id	name
+1	Bulbasaur
+2	Ivysaur
+3	Venusaur
+4	Charmander
+5	Charmeleon
+6	Charizard
+7	Squirtle
+8	Wartortle
+9	Blastoise
+17	Pidgeotto
+18	Pidgeot
+25	Pikachu
+26	Raichu
+37	Vulpix
+38	Ninetales
+46	Paras
+47	Parasect
+54	Psyduck
+55	Golduck
+84	Doduo
+85	Dodrio
+116	Horsea
+117	Seadra
+126	Magmar
+129	Magikarp
+130	Gyarados
+131	Lapras
+133	Eevee
+137	Porygon
+150	Mewtwo
+151	Mew
+152	Chikorita
+172	Pichu
+249	Lugia
+251	Celebi
+nickname
+Salad
+Piece of cake
+Three-headed dumb
+Cho'gall
+Chikorita
+Fluffy
+AAA
+Small Battery
+Water gun
+Ninja Turtle
+Mushroom
+Free Battery
+Turtle
+Mouse
+Huge Battery
+Ahri
+name	id
+Venusaur	3
+Charizard	6
+Wartortle	8
+Pikachu	25
+Pikachu	25
+Raichu	26
+Raichu	26
+Ninetales	38
+Golduck	55
+Doduo	84
+Dodrio	85
+Seadra	117
+Gyarados	130
+Lapras	131
+Eevee	133
+Mewtwo	150
+nickname
+Donald Duck
+Laputa
+Worm
+count(*)
+7
+count(*)
+17
+count(DISTINCT C.pid)
+14
+max(C.level)
+100
+count(DISTINCT P.type)
+3
+name	count(*)
+Ash	2
+Blue	2
+Yellow	3
+Green	4
+Red	5
+name
+Ivysaur
+Eevee
+type	count(*)
+Electric	3
+Psychic	4
+Fire	6
+Grass	6
+Normal	6
+Water	10
+name
+Erika
+Gold
+Green
+Matis
+Red
+Yellow
+hometown	AVG(CP.level)
+Rainbow City	17.5000
+Brown City	33.3333
+Blue City	43.2500
+Sangnok City	46.3125
+name
+Pikachu
+Raichu
+name
+Wartortle
+Venusaur
+Seadra
+Raichu
+Raichu
+Pikachu
+Pichu
+Mewtwo
+Gyarados
+Golduck
+Dodrio
+Chikorita
+Charizard
+name	MAX(C.level)
+Green	70
+Red	100
+name	AVG(CP.level)
+Green	5.0000
+Yellow	22.0000
+Matis	33.3333
+Red	35.0000
+Ash	50.0000
+name	name	description
+Chikorita	Erika	Huge City with Casino
+Chikorita	Gold	Waterpark
+Chikorita	Gold	Waterpark
+id	name	name	name
+1	Bulbasaur	Ivysaur	Venusaur
+4	Charmander	Charmeleon	Charizard
+7	Squirtle	Wartortle	Blastoise
+172	Pichu	Pikachu	Raichu
+name
+Dodrio
+Doduo
+Golduck
+Ninetales
+Paras
+Parasect
+Pidgeot
+Pidgeotto
+Pikachu
+Psyduck
+Raichu
+Vulpix
+name
+Blastoise
+Bulbasaur
+Celebi
+Charmander
+Charmeleon
+Horsea
+Ivysaur
+Lugia
+Magikarp
+Magmar
+Mew
+Parasect
+Pidgeot
+Pidgeotto
+Porygon
+Psyduck
+Squirtle
+Vulpix
+SUM(CP.level)
+100
+name
+Erika
+Green
+Matis
+Misty
+type	100 * COUNT(*) / COUNT_TABLE.cnt
+Water	28.5714
+name
+Green
+Green
+Red
+Red
+name	SUM(CP.level)
+Red	345
+name
+Charmeleon
+Dodrio
+Golduck
+Gyarados
+Ivysaur
+Ninetales
+Parasect
+Pidgeot
+Pikachu
+Seadra
+Wartortle
+name
+Gold
+hometown	nickname
+Blue City	Worm
+Brown City	Huge Battery
+Rainbow City	Mushroom
+Sangnok City	Spoon killer
