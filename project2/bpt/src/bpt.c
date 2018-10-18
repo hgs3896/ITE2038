@@ -1,7 +1,7 @@
 /*
  *  bpt.c  
  */
-#define Version "1.14"
+
 /*
  *
  *  bpt:  B+ Tree Implementation
@@ -82,166 +82,13 @@ node * queue = NULL;
  */
 bool verbose_output = false;
 
+/* File descriptor for reading and writing database file. */
+int fd;
 
-// FUNCTION DEFINITIONS.
+/* Header Page */
+page_t header;
 
-// OUTPUT AND UTILITIES
-
-/* Copyright and license notice to user at startup. 
- */
-void license_notice( void ) {
-    printf("bpt version %s -- Copyright (C) 2010  Amittai Aviram "
-            "http://www.amittai.com\n", Version);
-    printf("This program comes with ABSOLUTELY NO WARRANTY; for details "
-            "type `show w'.\n"
-            "This is free software, and you are welcome to redistribute it\n"
-            "under certain conditions; type `show c' for details.\n\n");
-}
-
-
-/* Routine to print portion of GPL license to stdout.
- */
-void print_license( int license_part ) {
-    int start, end, line;
-    FILE * fp;
-    char buffer[0x100];
-
-    switch(license_part) {
-    case LICENSE_WARRANTEE:
-        start = LICENSE_WARRANTEE_START;
-        end = LICENSE_WARRANTEE_END;
-        break;
-    case LICENSE_CONDITIONS:
-        start = LICENSE_CONDITIONS_START;
-        end = LICENSE_CONDITIONS_END;
-        break;
-    default:
-        return;
-    }
-
-    fp = fopen(LICENSE_FILE, "r");
-    if (fp == NULL) {
-        perror("print_license: fopen");
-        exit(EXIT_FAILURE);
-    }
-    for (line = 0; line < start; line++)
-        fgets(buffer, sizeof(buffer), fp);
-    for ( ; line < end; line++) {
-        fgets(buffer, sizeof(buffer), fp);
-        printf("%s", buffer);
-    }
-    fclose(fp);
-}
-
-
-/* First message to the user.
- */
-void usage_1( void ) {
-    printf("B+ Tree of Order %d.\n", order);
-    printf("Following Silberschatz, Korth, Sidarshan, Database Concepts, "
-           "5th ed.\n\n"
-           "To build a B+ tree of a different order, start again and enter "
-           "the order\n"
-           "as an integer argument:  bpt <order>  ");
-    printf("(%d <= order <= %d).\n", MIN_ORDER, MAX_ORDER);
-    printf("To start with input from a file of newline-delimited integers, \n"
-           "start again and enter the order followed by the filename:\n"
-           "bpt <order> <inputfile> .\n");
-}
-
-
-/* Second message to the user.
- */
-void usage_2( void ) {
-    printf("Enter any of the following commands after the prompt > :\n"
-    "\ti <k>  -- Insert <k> (an integer) as both key and value).\n"
-    "\tf <k>  -- Find the value under key <k>.\n"
-    "\tp <k> -- Print the path from the root to key k and its associated "
-           "value.\n"
-    "\tr <k1> <k2> -- Print the keys and values found in the range "
-            "[<k1>, <k2>\n"
-    "\td <k>  -- Delete key <k> and its associated value.\n"
-    "\tx -- Destroy the whole tree.  Start again with an empty tree of the "
-           "same order.\n"
-    "\tt -- Print the B+ tree.\n"
-    "\tl -- Print the keys of the leaves (bottom row of the tree).\n"
-    "\tv -- Toggle output of pointer addresses (\"verbose\") in tree and "
-           "leaves.\n"
-    "\tq -- Quit. (Or use Ctl-D.)\n"
-    "\t? -- Print this help message.\n");
-}
-
-
-/* Brief usage note.
- */
-void usage_3( void ) {
-    printf("Usage: ./bpt [<order>]\n");
-    printf("\twhere %d <= order <= %d .\n", MIN_ORDER, MAX_ORDER);
-}
-
-
-/* Helper function for printing the
- * tree out.  See print_tree.
- */
-void enqueue( node * new_node ) {
-    node * c;
-    if (queue == NULL) {
-        queue = new_node;
-        queue->next = NULL;
-    }
-    else {
-        c = queue;
-        while(c->next != NULL) {
-            c = c->next;
-        }
-        c->next = new_node;
-        new_node->next = NULL;
-    }
-}
-
-
-/* Helper function for printing the
- * tree out.  See print_tree.
- */
-node * dequeue( void ) {
-    node * n = queue;
-    queue = queue->next;
-    n->next = NULL;
-    return n;
-}
-
-
-/* Prints the bottom row of keys
- * of the tree (with their respective
- * pointers, if the verbose_output flag is set.
- */
-void print_leaves( node * root ) {
-    int i;
-    node * c = root;
-    if (root == NULL) {
-        printf("Empty tree.\n");
-        return;
-    }
-    while (!c->is_leaf)
-        c = c->pointers[0];
-    while (true) {
-        for (i = 0; i < c->num_keys; i++) {
-            if (verbose_output)
-                printf("%lx ", (unsigned long)c->pointers[i]);
-            printf("%d ", c->keys[i]);
-        }
-        if (verbose_output)
-            printf("%lx ", (unsigned long)c->pointers[order - 1]);
-        if (c->pointers[order - 1] != NULL) {
-            printf(" | ");
-            c = c->pointers[order - 1];
-        }
-        else
-            break;
-    }
-    printf("\n");
-}
-
+const pagenum_t PAGE_NOT_FOUND = -1l;
 
 /* Utility function to give the height
  * of the tree, which length in number of edges
@@ -1232,3 +1079,170 @@ node * destroy_tree(node * root) {
     return NULL;
 }
 
+// Allocate an on-disk page from the free page list
+pagenum_t file_alloc_page(){
+    static page_t buf;
+    if(fd <= 0)
+        return PAGE_NOT_FOUND;
+    if(!SEEK(header.header_page.free_page_offset)){
+        perror("File seek error");
+        return PAGE_NOT_FOUND;
+    }
+    if(!READ(buf)){
+        perror("File read error");
+        return PAGE_NOT_FOUND;
+    }
+    if(buf.free_page.next_free_page_offset==0)
+        ;// 새로운 free page를 요청한다.
+
+    header.header_page.free_page_offset = buf.free_page.next_free_page_offset;
+    // header free page를 갱신한다.
+    SEEK(0);
+    WRITE(header);
+    return header.header_page.free_page_offset;
+}
+
+// Free an on-disk page to the free page list
+void file_free_page(pagenum_t pagenum){
+    if(fd <= 0)
+        return;
+
+    if(!SEEK(OFFSET(pagenum))){
+        perror("File seek error");
+        return;
+    }
+
+    page_t buf;
+    READ(buf);
+
+    // Make it a free page
+    CLEAR(buf);
+
+    // Add it into the free page list
+    buf.free_page.next_free_page_offset = header.header_page.free_page_offset;
+    header.header_page.free_page_offset = OFFSET(pagenum);
+
+    // Apply changes to the header page.
+    SEEK(0);
+    WRITE(header);    
+}
+
+// Read an on-disk page into the in-memory page structure(dest)
+void file_read_page(pagenum_t pagenum, page_t* dest){
+    SEEK(OFFSET(pagenum));
+    READ(*dest);
+}
+
+// Write an in-memory page(src) to the on-disk page
+void file_write_page(pagenum_t pagenum, const page_t* src){
+    SEEK(OFFSET(pagenum));
+    WRITE(*src);
+}
+
+/*
+    Open existing data file using ‘pathname’ or create one if not existed.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+int open_db (char *pathname){
+    // 파일 이름이 이상하면 터트린다.
+    if(pathname == NULL) return -1;
+    // 파일을 없으면 만든다 있으면 그 파일을 연다.
+    if(fd == 0){
+        // Make a file if it does not exist.
+        // Do not use a symbolic link.
+        // Flush the buffer whenever try to write.
+        // Permission is set to 0644.
+        fd = open(pathname, O_CREAT | O_RDWR | O_NOFOLLOW | O_SYNC, S_IWUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        // Add a handler which is to be executed before the process exits.
+        atexit(when_exit);
+    }
+    // 파일 출력에 실패하면, 터트린다.
+    if(fd == -1){
+        perror("open_db error");
+        return -1;
+    }
+    // Start to read from the header
+    if(READ(header) == 0){
+        // If the header page doesn't exist, create a new one.
+        
+        // Write a header page.
+        CLEAR(header);
+        header.header_page.free_page_offset = PAGESIZE;
+        header.header_page.root_page_offset = 0; // 0 means the root page does not exist.
+        header.header_page.num_of_page = 0; // the number of created pages
+        if(!WRITE(header)) {
+            perror("Not enough memory");
+            return -1;
+        }
+
+        // Write a few of free pages
+        CLEAR(header);        
+        for(int i=1;i<=DEFAULT_SIZE_OF_FREE_PAGES;++i){            
+            header.free_page.next_free_page_offset = ( ( i + 1 ) % (DEFAULT_SIZE_OF_FREE_PAGES + 1) ) * PAGESIZE;
+            if(!WRITE(header)) {
+                perror("Not enough memory");
+                return -1;
+            }
+        }
+        SEEK(0);
+        READ(header);
+    }
+    /*
+    printf("number of pages: %ld\n", buf.header_page.num_of_page);
+    printf("free page offset: %ld\n", buf.header_page.free_page_offset);
+    pageoffset_t offset = buf.header_page.free_page_offset;
+    do{
+        if(lseek(fd, offset, SEEK_SET)<0){
+            perror("File seek error");
+            break;
+        }
+        if(read(fd, &buf, sizeof buf) < 0){
+            perror("File Read error");
+            break;   
+        }
+        printf("free page found\t offset: %ld\n", offset);
+    }while((offset=buf.free_page.next_free_page_offset)!=0);
+    */
+    return 0;
+}
+
+/*
+    Insert input ‘key/value’ (record) to data file at the right place.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+/*
+int insert (int64_t key, char * value){
+    // 이미 동일한 키가 있는지 검사하고, 삽입각을 잡는다.
+    // 삽입각에 삽입한다.
+    // 정상적으로 삽입했다면 0, 아니면 0이 아닌 값이다.
+}
+*/
+
+/*
+    Find the record containing input ‘key’.
+    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
+*/
+/*
+char * find (int64_t key){
+    // 이미 동일한 키가 있는지 검사한다.
+    // 찾으면 value를 return한다.
+    // 못 찾았으면 NULL을 return한다.
+}
+*/
+/*
+    Find the matching record and delete it if found.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+/*
+int delete (int64_t key){
+    // 키를 검색한다.
+    // 키가 있다면, 해당 키를 제거하고, 0을 return한다..
+    // 키가 없다면, 0이 아닌 값을 return한다. 
+}
+*/
+
+void when_exit(void){
+    fsync(fd);
+    if(fd!=0)
+        close(fd);
+}

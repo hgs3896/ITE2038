@@ -1,11 +1,21 @@
 #ifndef __BPT_H__
 #define __BPT_H__
 
+#define Version "1.14"
+
 // Uncomment the line below if you are compiling on Windows.
 // #define WINDOWS
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+
 #ifdef WINDOWS
 #define bool char
 #define false 0
@@ -14,6 +24,12 @@
 
 // Default order is 4.
 #define DEFAULT_ORDER 4
+
+// Page size
+#define PAGESIZE 4096
+
+// Default size of free pages
+#define DEFAULT_SIZE_OF_FREE_PAGES 10
 
 // Minimum order is necessarily 3.  We set the maximum
 // order arbitrarily.  You may change the maximum order.
@@ -29,6 +45,13 @@
 #define LICENSE_CONDITIONS_START 70
 #define LICENSE_CONDITIONS_END 625
 
+// MACROs
+#define READ(buf) (read(fd, &buf, PAGESIZE))
+#define WRITE(buf) (write(fd, &buf, PAGESIZE))
+#define CLEAR(buf) (memset(&buf, 0, PAGESIZE))
+#define SEEK(offset) (lseek(fd, offset, SEEK_SET) >= 0)
+#define OFFSET(page_num) (pagenum * PAGESIZE)
+
 // TYPES.
 
 /* Type representing the record
@@ -42,7 +65,7 @@
  * of the value field.
  */
 typedef struct record {
-    int value;
+    int key, value;
 } record;
 
 /* Type representing a node in the B+ tree.
@@ -82,6 +105,72 @@ typedef struct node {
     struct node * next; // Used for queue.
 } node;
 
+// Page number
+typedef uint64_t pagenum_t;
+typedef uint64_t pageoffset_t;
+typedef int8_t byte;
+
+// Record format
+typedef struct record_t
+{
+    uint64_t key;
+    int8_t value[120];
+} record_t;
+
+// Key Pair
+typedef struct key_pair
+{
+    uint64_t key;
+    pageoffset_t offset;
+} key_pair;
+
+// Page Layout
+typedef struct page_t
+{
+    // in-memory page structure
+    union
+    {
+        struct header_page
+        {
+            pageoffset_t free_page_offset; // 8
+            pageoffset_t root_page_offset; // 8
+            pagenum_t num_of_page; // 8
+            byte reserved[4072];
+        } header_page; // 4096
+        struct free_page
+        {
+            pageoffset_t next_free_page_offset; // 8
+            byte not_used[4088];
+        } free_page; // 4096
+        struct
+        {
+            struct
+            {
+                pageoffset_t offset; // 8
+                uint32_t isLeaf; // 4
+                uint32_t num_of_keys; // 4
+                byte reserved[104]; // 104
+                // Right Sibling Page Offset
+                pageoffset_t right_sibling_page_offset; // 8
+            } page_header; // 128
+            record_t data[31]; // 31 * 128 = 3968
+        } leaf_page; // 4096
+        struct internal_page
+        {
+            struct page_header
+            {
+                pageoffset_t offset; // 8
+                uint32_t isLeaf; // 4
+                uint32_t num_of_keys; // 4
+                byte reserved[104]; // 104
+                // One More Page Offset
+                pageoffset_t one_more_page_offset; // 8
+            } page_header;
+            key_pair pairs[248];
+        } internal_page;
+    };
+} page_t;
+
 // GLOBALS.
 
 /* The order determines the maximum and minimum
@@ -110,6 +199,14 @@ extern node * queue;
  */
 extern bool verbose_output;
 
+/* File descriptor for reading and writing database file. */
+extern int fd;
+
+/* Header Page */
+extern page_t header;
+
+
+extern const pagenum_t PAGE_NOT_FOUND;
 
 // FUNCTION PROTOTYPES.
 
@@ -122,10 +219,13 @@ void usage_2( void );
 void usage_3( void );
 void enqueue( node * new_node );
 node * dequeue( void );
-int height( node * root );
-int path_to_root( node * root, node * child );
 void print_leaves( node * root );
 void print_tree( node * root );
+
+
+int height( node * root );
+int path_to_root( node * root, node * child );
+
 void find_and_print(node * root, int key, bool verbose); 
 void find_and_print_range(node * root, int range1, int range2, bool verbose); 
 int find_range( node * root, int key_start, int key_end, bool verbose,
@@ -167,5 +267,39 @@ node * delete( node * root, int key );
 
 void destroy_tree_nodes(node * root);
 node * destroy_tree(node * root);
+
+// File Management
+
+void when_exit(void);
+
+// Allocate an on-disk page from the free page list
+pagenum_t file_alloc_page();
+// Free an on-disk page to the free page list
+void file_free_page(pagenum_t pagenum);
+// Read an on-disk page into the in-memory page structure(dest)
+void file_read_page(pagenum_t pagenum, page_t* dest);
+// Write an in-memory page(src) to the on-disk page
+void file_write_page(pagenum_t pagenum, const page_t* src);
+
+/*
+    Open existing data file using ‘pathname’ or create one if not existed.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+int open_db (char *pathname);
+/*
+    Insert input ‘key/value’ (record) to data file at the right place.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+// int insert (int64_t key, char * value);
+/*
+    Find the record containing input ‘key’.
+    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
+*/
+// char * find (int64_t key);
+/*
+    Find the matching record and delete it if found.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+// int delete (int64_t key);
 
 #endif /* __BPT_H__*/

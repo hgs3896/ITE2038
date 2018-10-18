@@ -27,6 +27,8 @@ int main( int argc, char ** argv ) {
     usage_1();  
     usage_2();
 
+    open_db("fuck_you.db");
+
     if (argc > 2) {
         input_file = argv[2];
         fp = fopen(input_file, "r");
