@@ -274,8 +274,8 @@ offset_t make_internal(void)
     if ( new_page < 0 )
         return PAGE_NOT_FOUND;
     page_t buf;
-    buf.num_keys = 0;
-    buf.isLeaf = false;
+    setNumberOfKeys(&buf, 0);
+    setLeaf(false);
     SEEK(OFFSET(new_page));
     WRITE(buf);
     return OFFSET(new_page);
@@ -290,8 +290,8 @@ offset_t make_leaf(void)
     if ( new_page < 0 )
         return PAGE_NOT_FOUND;
     page_t buf;
-    buf.num_keys = 0;
-    buf.isLeaf = true;
+    setNumberOfKeys(&buf, 0);
+    setLeaf(true);
     SEEK(OFFSET(new_page));
     WRITE(buf);
     return OFFSET(new_page);
@@ -301,11 +301,12 @@ offset_t make_leaf(void)
 /* Find the index of the parent's pointer to the node to the left of the key to be inserted.
  */
 int get_left_index(offset_t parent, offset_t left) {
-    int left_index = 0;
     page_t p;
     SEEK(parent);
     READ(p);
-    while (left_index <= p.num_keys && p.pair[left_index].offset != left)
+    int left_index = 0, num_keys = getNumberOfKeys(&p);
+
+    while (left_index <= num_keys && getOffset(&p, left_index) != left)
         left_index++;
     return left_index;
 }
@@ -319,18 +320,19 @@ offset_t insert_into_leaf(offset_t leaf, uint64_t key, record_t * pointer)
     page_t buf;
     SEEK(leaf);
     READ(buf);
-    int i, insertion_point;
+    int i, insertion_point, num_keys;
 
     insertion_point = 0;
-    while ( insertion_point < buf.num_keys && buf.data[insertion_point].key < key )
+    num_keys = getNumberOfKeys(&buf);
+    while ( insertion_point < num_keys && getKey(&buf, insertion_point) < key )
         insertion_point++;
 
-    for ( i = buf.num_keys; i > insertion_point; i-- )
+    for ( i = num_keys; i > insertion_point; i-- )
     {
-        buf.data[i] = buf.data[i - 1];
+        moveRecord(&buf, i - 1, i);
     }
-    buf.data[insertion_point] = *pointer;
-    buf.num_keys++;
+    setRecord(&buf, insertion_point, pointer);
+    setNumberOfKeys(buf.num_keys++);
     WRITE(buf);
     return leaf;
 }
@@ -1156,8 +1158,6 @@ int open_db (char *pathname){
             perror("Not enough memory");
             return -1;
         }
-
-        alloc
     }
     /*
     printf("number of pages: %ld\n", buf.hd.num_of_page);

@@ -81,7 +81,7 @@ uint32_t isLeaf(const page_t *page);
 uint32_t getNumberOfKeys(const page_t *page);
 uint64_t getKey(const page_t *page, uint32_t index);
 uint64_t getOffset(const page_t *page, uint32_t index);
-record_t* getRecord(page_t *page, uint64_t key);
+void copyRecord(record_t* dest, const record_t* src);
 
 // Insertion.
 

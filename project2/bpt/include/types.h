@@ -74,10 +74,10 @@ struct node_page_t
     };
     union
     {
-        // Data Records
-        record_t data[31]; // for internal page
         // Key Pairs
-        key_pair pairs[248]; // for leaf page
+        key_pair pairs[248];  // for internal page
+        // Data Records
+        record_t records[31]; // for leaf page
     };
 };
 
