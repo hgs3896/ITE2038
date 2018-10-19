@@ -18,65 +18,75 @@ typedef int8_t byte;
 typedef uint64_t pagenum_t;
 typedef uint64_t offset_t;
 
-typedef struct node {
+typedef struct node
+{
     offset_t offset;
     struct node * next; // Used for queue.
 } node;
 
+typedef struct record_t record_t;
+typedef struct key_pair key_pair;
+typedef struct header_page_t header_page_t;
+typedef struct free_page_t free_page_t;
+typedef struct node_page_t node_page_t;
+typedef union page_t page_t;
+
 // Record format
-typedef struct record_t
+struct record_t
 {
     uint64_t key;
     int8_t value[120];
-} record_t;
+};
 
 // Key Pair
-typedef struct key_pair
+struct key_pair
 {
     uint64_t key;
     offset_t offset;
-} key_pair;
+};
 
-typedef struct header_page_t
+struct header_page_t
 {
     offset_t free_page_offset; // 8
     offset_t root_page_offset; // 8
     pagenum_t num_of_page; // 8
     byte reserved[4072];
-} header_page_t;  // 4096
+};
 
-typedef struct free_page_t
+struct free_page_t
 {
     offset_t next_free_page_offset; // 8
     byte not_used[4088];
-} free_page_t; // 4096
+};
 
-typedef struct node_page_t{
+struct node_page_t
+{
     offset_t offset; // Parent page offset
     uint32_t isLeaf; // Leaf(1) / Internal(0)
     uint32_t num_keys; // The number of keys, Internal Page(249), Leaf Page(31)
     byte reserved[104]; // Reserved Area
-    union{
+    union
+    {
         // One More Page Offset
         offset_t one_more_page_offset; // (leftmost child) for internal page
         // Right Sibling Page Offset
         offset_t right_sibling_page_offset; // (next page offset) for leaf page
     };
-    union{
+    union
+    {
         // Data Records
         record_t data[31]; // for internal page
         // Key Pairs
         key_pair pairs[248]; // for leaf page
     };
-} node_page_t; // 4096
+};
 
 // Page Layout
-typedef union page_t
+union page_t
 {
-    // in-memory page structure
-    header_page_t;
-    free_page_t;
-    node_page_t;
-} page_t;
+    header_page_t header_page;
+    free_page_t free_page;
+    node_page_t node_page;
+};
 
 #endif /* __TYPES_H__*/

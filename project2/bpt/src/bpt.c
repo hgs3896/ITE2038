@@ -100,7 +100,8 @@ void print_tree( pagenum_t pagenum ) {
         return;
     }
     offset_t n;
-    if(buf.isLeaf == false){
+    int i, j;
+    if(isLeaf(&buf) == false){
         // Internal Page
         queue = NULL;
         enqueue(OFFSET(pagenum));
@@ -109,12 +110,13 @@ void print_tree( pagenum_t pagenum ) {
             SEEK(OFFSET(n));
             READ(buf);
 
-            for (i = 0; i < buf.num_keys; i++) {
-                printf("%d ", buf.pair[i].key);
+            for (i = 0, j = getNumberOfKeys(&buf); i < j; i++) {
+                printf("%d ", getKey(&buf, i));
             }
-            if (!buf.isLeaf)
-                for (i = 0; i <= buf.num_keys; i++)
-                    enqueue(n->pointers[i]);
+            if (!buf.isLeaf){
+                for (i = 0, j = getNumberOfKeys(&buf); i <= j; i++)
+                    enqueue(getOffset(&buf, i));
+            }
         }
         printf("| ");
     }else{
@@ -129,18 +131,20 @@ void print_tree( pagenum_t pagenum ) {
  * appropriate message to stdout.
  */
 void find_and_print(node * root, uint64_t key ) {
-    record_t * r = find(root, key);
+    record_t * r = find_record(root, key);
     if (r == NULL)
-        printf("record_t not found under key %d.\n", key);
+        printf("record_t not found under key %ul.\n", key);
     else 
-        printf("record_t at %lx -- key %d, value %d.\n",
+        printf("record_t at %lx -- key %ul, value %s.\n",
                 (unsigned long)r, key, r->value);
+    free(r);
 }
 
 
 /* Finds and prints the keys, pointers, and values within a range
  * of keys between key_start and key_end, including both bounds.
  */
+/*
 void find_and_print_range( node * root, uint64_t key_start, uint64_t key_end ) {
     int i;
     int array_size = key_end - key_start + 1;
@@ -159,6 +163,7 @@ void find_and_print_range( node * root, uint64_t key_start, uint64_t key_end ) {
                      returned_pointers[i])->value);
     }
 }
+*/
 
 
 /* Finds keys and their pointers, if present, in the range specified
@@ -166,6 +171,7 @@ void find_and_print_range( node * root, uint64_t key_start, uint64_t key_end ) {
  * returned_keys and returned_pointers, and returns the number of
  * entries found.
  */
+/*
 int find_range( offset_t root, uint64_t key_start, uint64_t key_end, int returned_keys[], void * returned_pointers[]) {
     int i, num_found;
     num_found = 0;
@@ -184,6 +190,7 @@ int find_range( offset_t root, uint64_t key_start, uint64_t key_end, int returne
     }
     return num_found;
 }
+*/
 
 
 /* Traces the path from the root to a leaf, searching
@@ -196,7 +203,7 @@ offset_t find_leaf(offset_t root, uint64_t key)
     if ( fd <= 0 )
         return 0; // error
 
-    int i = 0;
+    int i = 0, j;
     offset_t c = root;
     if ( c == 0 )
     {
@@ -204,20 +211,15 @@ offset_t find_leaf(offset_t root, uint64_t key)
     }
 
     page_t buf;
-    while ( c != 0 && SEEK(c) >= 0 && READ(buf) >= 0 && !buf.isLeaf )
+    while ( c != 0 && SEEK(c) >= 0 && READ(buf) >= 0 && !isLeaf(&buf) )
     {
-        if ( key < buf.pairs[0].key )
+        i = 0, j = getNumberOfKeys(&buf);
+        while ( i < j )
         {
-            c = buf.one_more_page_offset;
-            break;
-        }
-        i = 0;
-        while ( i < buf.num_keys )
-        {
-            if ( key >= buf.pairs[i].key ) i++;
+            if ( key >= getKey(&buf.i) ) i++;
             else break;
         }
-        c = buf.pairs[i].offset;
+        c = getOffset(&buf,i);
     }
     return c;
 }
@@ -226,21 +228,28 @@ offset_t find_leaf(offset_t root, uint64_t key)
 /* Finds and returns the record_t to which
  * a key refers.
  */
-record_t * find(offset_t root, uint64_t key)
+record_t * find_record( offset_t root, uint64_t key )
 {
-    int i = 0;
+    int i = 0, j;
     offset_t c = find_leaf(root, key);
     if ( c == 0 ) return NULL;
 
     page_t buf;
     SEEK(c);
     READ(buf);
-    for ( i = 0; i < buf.num_keys; i++ )
-        if ( buf.data[i].key == key ) break;
-    if ( i == buf.num_keys )
-        return NULL;
-    else
-        return memcpy(malloc(128), &buf.data[i], 128);
+    return getRecord(&buf, key);
+}
+
+/*
+    Find the record_t containing input ‘key’.
+    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
+*/
+
+char * find (int64_t key){
+    return find_record(header.root_page_offset, key);
+    // 이미 동일한 키가 있는지 검사한다.
+    // 찾으면 value를 return한다.
+    // 못 찾았으면 NULL을 return한다.
 }
 
 /* Finds the appropriate place to
@@ -296,7 +305,7 @@ int get_left_index(offset_t parent, offset_t left) {
     page_t p;
     SEEK(parent);
     READ(p);
-    while (left_index <= p.num_keys && p.pair[left_index] != left)
+    while (left_index <= p.num_keys && p.pair[left_index].offset != left)
         left_index++;
     return left_index;
 }
@@ -305,7 +314,7 @@ int get_left_index(offset_t parent, offset_t left) {
  * key into a leaf.
  * Returns the altered leaf.
  */
-offset_t insert_into_leaf(offset_t leaf, uint64_t key, record_t_t * pointer)
+offset_t insert_into_leaf(offset_t leaf, uint64_t key, record_t * pointer)
 {
     page_t buf;
     SEEK(leaf);
@@ -331,7 +340,7 @@ offset_t insert_into_leaf(offset_t leaf, uint64_t key, record_t_t * pointer)
  * the tree's order, causing the leaf to be split
  * in half.
  */
-offset_t insert_into_leaf_after_splitting(offset_t root, offset_t leaf, uint64_t key, record_t_t * pointer)
+offset_t insert_into_leaf_after_splitting(offset_t root, offset_t leaf, uint64_t key, record_t * pointer)
 {
     page_t left_page, right_page;
     offset_t new_leaf;
@@ -459,9 +468,7 @@ offset_t insert_into_node_after_splitting(offset_t root, offset_t old_node, int 
     int i, j, split, k_prime;
     offset_t new_node, child;
     page_t old_page, new_page;
-    SEEK(old_node);
-    READ(old_page);
-
+    
     /* First create a temporary set of keys and pointers
      * to hold everything in order, including
      * the new key and pointer, inserted in their
@@ -471,6 +478,10 @@ offset_t insert_into_node_after_splitting(offset_t root, offset_t old_node, int 
      * the other half to the new.
      */
 
+    SEEK(old_node);
+    READ(old_page);
+
+    /*
     for (i = 0, j = 0; i < old_page.num_keys + 1; i++, j++) {
         if (j == left_index + 1) j++;
         temp_pointers[j] = old_node->pointers[i];
@@ -483,16 +494,22 @@ offset_t insert_into_node_after_splitting(offset_t root, offset_t old_node, int 
 
     temp_pointers[left_index + 1] = right;
     temp_keys[left_index] = key;
+    */
 
-    /* Create the new node and copy
-     * half the keys and pointers to the
-     * old and half to the new.
-     */  
-    split = cut(order);
+    /* Create the new node and copy half the keys and pointers to the old and half to the new. */  
+    split = cut(DEFAULT_INTERNAL_ORDER);
+
+    for(i=0;i<old_page.num_keys && old_page.pair[i].key != left_index;++i);
+    for(j=i;)old_page.num_keys
+
     new_node = make_node();
+    old_page.num_keys = 0;
+
     SEEK(new_node);
     READ(new_page);
-    old_page.num_keys = 0;
+    
+    for (i = )
+
     for (i = 0; i < split - 1; i++) {
         old_node->pointers[i] = temp_pointers[i];
         old_node->keys[i] = temp_keys[i];
@@ -500,7 +517,7 @@ offset_t insert_into_node_after_splitting(offset_t root, offset_t old_node, int 
     }
     old_node->pointers[i] = temp_pointers[i];
     k_prime = temp_keys[split - 1];
-    for (++i, j = 0; i < order; i++, j++) {
+    for (++i, j = 0; i < DEFAULT_INTERNAL_ORDER; i++, j++) {
         new_node->pointers[j] = temp_pointers[i];
         new_node->keys[j] = temp_keys[i];
         new_node->num_keys++;
@@ -528,32 +545,47 @@ offset_t insert_into_node_after_splitting(offset_t root, offset_t old_node, int 
  * the new root.
  */
 offset_t insert_into_new_root(offset_t left, uint64_t key, offset_t right) {
+    page_t page;
+    offset_t root = make_node();
+    
+    SEEK(root);    
+    READ(page);
+    page.one_more_page_offset = left;
+    page.pair[0].key = key;
+    page.pair[0].offset = right;
+    page.num_keys++;
+    WRITE(page);
 
-    node * root = make_node();
-    root->keys[0] = key;
-    root->pointers[0] = left;
-    root->pointers[1] = right;
-    root->num_keys++;
-    root->parent = NULL;
-    left->parent = root;
-    right->parent = root;
+    SEEK(left);    
+    READ(page);
+    page.offset = root;
+    WRITE(page);
+
+    SEEK(right);    
+    READ(page);
+    page.offset = root;    
+    WRITE(page);
+
     return root;
 }
 
 
 
-/* First insertion:
- * start a new tree.
+/* First insertion: start a new tree.
  */
-node * start_new_tree(uint64_t key, record_t * pointer) {
-
-    node * root = make_leaf();
-    root->keys[0] = key;
-    root->pointers[0] = pointer;
-    root->pointers[order - 1] = NULL;
-    root->parent = NULL;
-    root->num_keys++;
+offset_t start_new_tree(uint64_t key, record_t * pointer) {
+    offset_t root = make_leaf();
+    page_t page;
+    SEEK(root);
+    READ(page);
+    page.pair[page.num_keys++] = *pointer;
+    page.offset = 0;
+    WRITE(page);
     return root;
+}
+
+int insert (int64_t key, char * value){
+    insert_record(header.root_page_offset, key, value);
 }
 
 /* Master insertion function.
@@ -562,10 +594,10 @@ node * start_new_tree(uint64_t key, record_t * pointer) {
  * however necessary to maintain the B+ tree
  * properties.
  */
-offset_t insert(offset_t root, uint64_t key, int value)
+offset_t insert_record( offset_t root, uint64_t key, const char * value )
 {
 
-    record_t_t * pointer;
+    record_t * pointer;
     node * leaf;
 
     /* The current implementation ignores
@@ -614,13 +646,14 @@ offset_t insert(offset_t root, uint64_t key, int value)
 */
 
 int insert (int64_t key, char * value){
-    if (find(root, key, false) != NULL)
+    if (find_record(root, key) != 0)
         return root;
     // 이미 동일한 키가 있는지 검사하고, 삽입각을 잡는다.
     // 삽입각에 삽입한다.
     // 정상적으로 삽입했다면 0, 아니면 0이 아닌 값이다.
 }
 
+#if 0
 
 // DELETION.
 
@@ -970,7 +1003,7 @@ node * delete_entry( node * root, node * n, uint64_t key, void * pointer ) {
 
 /* Master deletion function.
  */
-node * delete(node * root, uint64_t key) {
+node * delete_record(node * root, uint64_t key) {
 
     node * key_leaf;
     record_t * key_record_t;
@@ -1003,6 +1036,8 @@ node * destroy_tree(node * root) {
     destroy_tree_nodes(root);
     return NULL;
 }
+
+#endif
 
 // Allocate an on-disk page from the free page list
 pagenum_t file_alloc_page(){
@@ -1144,27 +1179,15 @@ int open_db (char *pathname){
 }
 
 /*
-    Find the record_t containing input ‘key’.
-    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
-*/
-
-char * find (int64_t key){
-    // 이미 동일한 키가 있는지 검사한다.
-    // 찾으면 value를 return한다.
-    // 못 찾았으면 NULL을 return한다.
-}
-
-/*
     Find the matching record_t and delete it if found.
     If success, return 0. Otherwise, return non-zero value.
 */
-/*
+
 int delete (int64_t key){
     // 키를 검색한다.
     // 키가 있다면, 해당 키를 제거하고, 0을 return한다..
     // 키가 없다면, 0이 아닌 값을 return한다. 
 }
-*/
 
 void when_exit(void){
     fsync(fd);

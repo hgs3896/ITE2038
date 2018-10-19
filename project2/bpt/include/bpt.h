@@ -43,8 +43,45 @@ void find_and_print(offset_t root, uint64_t key);
 void find_and_print_range(offset_t root, int range1, int range2); 
 int find_range( offset_t root, uint64_t key_start, uint64_t key_end, int returned_keys[], void * returned_pointers[]); 
 offset_t find_leaf( offset_t root, uint64_t key );
-record_t * find( offset_t root, uint64_t key, );
+record_t * find_record( offset_t root, uint64_t key );
 int cut( int length );
+/*
+    Find the record containing input ‘key’.
+    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
+*/
+char * find (int64_t key);
+
+// Setters and Getters
+
+// for Header Page
+void setFreePageOffset(page_t *page, offset_t free_page_offset);
+void setRootPageOffset(page_t *page, offset_t root_page_offset);
+void setNumberOfPages(page_t *page, pagenum_t num_of_page);
+offset_t getFreePageOffset(const page_t *page);
+offset_t getRootPageOffset(const page_t *page);
+pagenum_t getNumberOfPages(const page_t *page);
+
+// for Free Page
+void setNextFreePageOffset(page_t *page, offset_t next_free_page_offset);
+offset_t getNextFreePageOffset(const page_t *page);
+
+// for Node Page
+
+void setParent(page_t *page, offset_t offset);
+void setLeaf(page_t *page, uint32_t isLeaf);
+void setNumberOfKeys(page_t *page, uint32_t num_keys);
+void setKey(page_t *page, uint32_t index, uint64_t key);
+void setOffset(page_t *page, uint32_t index, uint64_t offset);
+void setRecord(page_t *page, const record_t* record);
+void moveRecord(page_t *page, int from, int to);
+void copyRecord(record_t* dest, const record_t* src);
+
+offset_t getParent(const page_t *page);
+uint32_t isLeaf(const page_t *page);
+uint32_t getNumberOfKeys(const page_t *page);
+uint64_t getKey(const page_t *page, uint32_t index);
+uint64_t getOffset(const page_t *page, uint32_t index);
+record_t* getRecord(page_t *page, uint64_t key);
 
 // Insertion.
 
@@ -58,7 +95,13 @@ offset_t insert_into_node_after_splitting( offset_t root, offset_t parent, int l
 offset_t insert_into_parent( offset_t root, offset_t left, uint64_t key, offset_t right );
 offset_t insert_into_new_root( offset_t left, uint64_t key, offset_t right );
 offset_t start_new_tree( uint64_t key, offset_t pointer );
-offset_t insert( offset_t root, uint64_t key, int value );
+offset_t insert_record( offset_t root, uint64_t key, const char * value );
+
+/*
+    Insert input ‘key/value’ (record) to data file at the right place.
+    If success, return 0. Otherwise, return non-zero value.
+*/
+int insert (int64_t key, char * value);
 
 // Deletion.
 
@@ -70,10 +113,11 @@ node * redistribute_nodes(node * root, node * n, node * neighbor,
                           int neighbor_index,
         int k_prime_index, int k_prime);
 node * delete_entry( node * root, node * n, uint64_t key, void * pointer );
-node * delete( node * root, uint64_t key );
+node * delete_record( node * root, uint64_t key );
 
 void destroy_tree_nodes(node * root);
 node * destroy_tree(node * root);
+
 
 // File Management
 
@@ -97,16 +141,7 @@ void file_write_page(pagenum_t pagenum, const page_t* src);
     If success, return 0. Otherwise, return non-zero value.
 */
 int open_db (char *pathname);
-/*
-    Insert input ‘key/value’ (record) to data file at the right place.
-    If success, return 0. Otherwise, return non-zero value.
-*/
-int insert (int64_t key, char * value);
-/*
-    Find the record containing input ‘key’.
-    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
-*/
-char * find (int64_t key);
+
 /*
     Find the matching record and delete it if found.
     If success, return 0. Otherwise, return non-zero value.
