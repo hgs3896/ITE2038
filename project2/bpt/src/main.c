@@ -4,13 +4,10 @@
 
 int main( int argc, char ** argv ) {
 
-    node * root;
+    usage();
+
     int input, range2;
     char instruction, value[1024];
-
-    root = NULL;
-    
-    usage_2();
 
     open_db("fuck_you.db");
 
@@ -23,11 +20,17 @@ int main( int argc, char ** argv ) {
             // print_tree(root);
             break;
         case 'i':
-            scanf("%d %s", &input, value);
+            scanf("%d", &input);
+            scanf("%s", value);
             insert(input, value);
-            // print_tree(root);
+            print_tree(getRootPageOffset(&header));
             break;
         case 'f':
+            scanf("%d\b", &input);
+            char * str = find(input);
+            printf("%s\n", str ? str : "Not Found");
+            free(str);
+            break;
         case 'p':
             scanf("%d", &input);
             // find_and_print(root, input, instruction == 'p');
@@ -41,12 +44,15 @@ int main( int argc, char ** argv ) {
             }
             // find_and_print_range(root, input, range2, instruction == 'p');
             break;
+        case 'l':
+            print_leaves(getRootPageOffset(&header));
+            break;
         case 'q':
             while (getchar() != (int)'\n');
             return EXIT_SUCCESS;
             break;
         case 't':
-            print_tree(root);
+            print_tree(getRootPageOffset(&header));
             break;
         case 'x':
             /*
@@ -56,7 +62,7 @@ int main( int argc, char ** argv ) {
             //print_tree(root);
             break;
         default:
-            usage_2();
+            usage();
             break;
         }
         while (getchar() != (int)'\n');
