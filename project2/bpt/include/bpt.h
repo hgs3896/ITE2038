@@ -69,6 +69,7 @@ typedef  union page_t page_t;
 struct node
 {
     offset_t offset;
+    int depth;
     struct node * next; // Used for queue.
 };
 
@@ -228,14 +229,22 @@ int setNumOfKeys(page_t *page, uint32_t num_keys);
 int setKey(page_t *page, uint32_t index, uint64_t key);
 int setOffset(page_t *page, uint32_t index, uint64_t offset);
 int setValue(page_t *page, uint32_t index, const char *src);
+int setRecord(page_t *page, uint32_t index, const record_t* record);
+int clearRecord(page_t *page, uint32_t index);
+int copyRecord(page_t *page1, uint32_t index1, page_t *page2, uint32_t index2);
 
 // Utility
 
 int cut( int length );
-uint64_t binary_search_in_page(const page_t *page, uint64_t key);
-uint64_t modified_binary_search_in_page(const page_t *page, uint64_t key);
-void enqueue( offset_t new_node );
-offset_t dequeue( void );
+// Binary Search for the key
+uint64_t bsearch_key(const page_t *page, uint64_t key);
+// Binary Range Search for the key
+uint64_t brsearch_key(const page_t *page, uint64_t key);
+// Binary Search for the offset
+uint64_t bsearch_offset(const page_t *page, offset_t offset);
+
+void enqueue( offset_t new_node, int depth );
+offset_t dequeue( int* depth );
 void print_leaves( offset_t root );
 void print_tree( offset_t root );
 
