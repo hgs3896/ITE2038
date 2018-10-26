@@ -1,14 +1,19 @@
 #include "bpt.h"
 
 /*
-    Find the record containing input ‘key’.
-    If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
-*/
+ *  Find the record containing input ‘key’.
+ *  If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
+ */
 char * find (int64_t key) {
-    record_t* record = find_record(getRootPageOffset(&header), key);
-    if (record == NULL) return NULL;
-    char * ret = malloc(sizeof(record_t) - sizeof(keynum_t));
-    strncpy(ret, record->value, sizeof(record_t) - sizeof(keynum_t));
+    record_t* record;
+
+    file_read_page(HEADER_PAGE_NUM, &header);
+
+    if ((record = find_record(getRootPageOffset(&header), key)) == NULL)
+        return NULL;
+
+    char * ret = malloc(120);
+    strncpy(ret, record->value, 120);
     free(record);
     return ret;
 }
@@ -19,12 +24,22 @@ char * find (int64_t key) {
  */
 int insert (int64_t key, char * value) {
     record_t record;
+
+    // Set the data
     record.key = key;
     strncpy(record.value, value, 120);
 
     file_read_page(HEADER_PAGE_NUM, &header);
-    offset_t insert_offset = insert_record(getRootPageOffset(&header), &record);
-    return insert_offset == KEY_EXIST;
+
+    // Insert the record
+    offset_t root_offset = insert_record(getRootPageOffset(&header), &record);
+
+    // Update the root offset
+    file_read_page(HEADER_PAGE_NUM, &header);
+    setRootPageOffset(&header, root_offset);
+    file_write_page(HEADER_PAGE_NUM, &header);
+
+    return root_offset == KEY_EXIST;
 }
 
 /*
@@ -65,6 +80,7 @@ pagenum_t file_alloc_page() {
     setFreePageOffset(&header, getNextFreePageOffset(&buf));
     // Wrtie the header page and sync the cached header page with the file.
     file_write_page(HEADER_PAGE_NUM, &header);
+
     return free_page_offset;
 }
 
@@ -194,55 +210,52 @@ int setNextFreePageOffset(page_t *page, offset_t next_free_page_offset) {
 offset_t getParentOffset(const page_t *page) {
     return ((const node_page_t*)page)->offset;
 }
-uint32_t isLeaf(const page_t *page) {
+int isLeaf(const page_t *page) {
     return ((const node_page_t*)page)->isLeaf;
 }
-uint32_t getNumOfKeys(const page_t *page) {
+int getNumOfKeys(const page_t *page) {
     return ((const node_page_t*)page)->num_keys;
 }
-uint64_t getKey(const page_t *page, uint32_t index) {
+int getKey(const page_t *page, uint32_t index) {
     if (!isLeaf(page)) {
-        // Internal Page : 0<=index<DEFAULT_INTERNAL_ORDER
-        if (index >= DEFAULT_INTERNAL_ORDER - 1) {
+        // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER - 1
+        if (index >= DEFAULT_INTERNAL_ORDER - 1 || index < 0) {
             return INVALID_INDEX;
         } else {
             return ((const node_page_t*)page)->pairs[index].key;
         }
     } else {
-        // Leaf Page : 0<=index<DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER)
+        // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
+        if (index >= DEFAULT_LEAF_ORDER - 1 || index < 0)
             return INVALID_INDEX;
         else
             return ((const node_page_t*)page)->records[index].key;
     }
 }
-uint64_t getOffset(const page_t *page, uint32_t index) {
+offset_t getOffset(const page_t *page, uint32_t index) {
     if (!isLeaf(page)) {
-        // Internal Page : 0<=index<DEFAULT_INTERNAL_ORDER
-        if (index >= DEFAULT_INTERNAL_ORDER)
+        // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER
+        if (index >= DEFAULT_INTERNAL_ORDER | index < 0)
             return INVALID_INDEX;
         else if (index == 0)
             return ((const node_page_t*)page)->one_more_page_offset;
         else
             return ((const node_page_t*)page)->pairs[index - 1].offset;
     } else {
-        // Leaf Page : DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER)
-            return INVALID_INDEX;
-        else if (index == DEFAULT_LEAF_ORDER - 1)
+        // Leaf Page : index = DEFAULT_LEAF_ORDER - 1
+        if (index == DEFAULT_LEAF_ORDER)
             return ((const node_page_t*)page)->right_sibling_page_offset;
         else
-            return INVALID_PAGE;
+            return INVALID_INDEX;
     }
 }
 int getValue(const page_t *page, uint32_t index, char *desc) {
     if (isLeaf(page)) {
-        // Leaf Page : 0<=index<DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER) {
+        // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
+        if (index >= DEFAULT_LEAF_ORDER || index < 0) {
             return INVALID_INDEX;
         }
-
-        strncpy(desc, ((const node_page_t*)page)->records[index].value, sizeof(record_t) - sizeof(keynum_t));
+        strncpy(desc, ((const node_page_t*)page)->records[index].value, 120);
         return SUCCESS;
     } else {
         return INVALID_PAGE;
@@ -267,14 +280,14 @@ int setNumOfKeys(page_t *page, uint32_t num_keys) {
 }
 int setKey(page_t *page, uint32_t index, uint64_t key) {
     if (!isLeaf(page)) {
-        // Internal Page : 0<=index<DEFAULT_INTERNAL_ORDER
+        // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER - 1
         if (index >= DEFAULT_INTERNAL_ORDER - 1)
             return INVALID_INDEX;
 
         ((node_page_t*)page)->pairs[index].key = key;
         return SUCCESS;
     } else {
-        // Leaf Page : 0<=index<DEFAULT_LEAF_ORDER - 1
+        // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
         if (index >= DEFAULT_LEAF_ORDER)
             return INVALID_INDEX;
 
@@ -283,8 +296,8 @@ int setKey(page_t *page, uint32_t index, uint64_t key) {
 }
 int setOffset(page_t *page, uint32_t index, uint64_t offset) {
     if (!isLeaf(page)) {
-        // Internal Page : 0<=index<=DEFAULT_INTERNAL_ORDER
-        if (index >= DEFAULT_INTERNAL_ORDER)
+        // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER
+        if (index >= DEFAULT_INTERNAL_ORDER | index < 0)
             return INVALID_INDEX;
         else if (index == 0)
             ((node_page_t*)page)->one_more_page_offset = offset;
@@ -292,45 +305,29 @@ int setOffset(page_t *page, uint32_t index, uint64_t offset) {
             ((node_page_t*)page)->pairs[index - 1].offset = offset;
         return SUCCESS;
     } else {
-        // Leaf Page : DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER)
+        // Leaf Page : index == DEFAULT_LEAF_ORDER - 1
+        if (index != DEFAULT_LEAF_ORDER - 1) {
             return INVALID_INDEX;
-        else if (index == DEFAULT_LEAF_ORDER - 1)
-            return ((node_page_t*)page)->right_sibling_page_offset = offset;
-        else
-            return INVALID_PAGE;
+        } else {
+            ((node_page_t*)page)->right_sibling_page_offset = offset;
+            return SUCCESS;
+        }
     }
 }
 int setValue(page_t *page, uint32_t index, const char *src) {
     if (isLeaf(page)) {
-        // Leaf Page : 0<=index<DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER) {
+        // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
+        if (index >= DEFAULT_LEAF_ORDER | index < 0) {
             return INVALID_INDEX;
         }
 
-        strncpy(((node_page_t*)page)->records[index].value, src, sizeof(record_t) - sizeof(keynum_t));
+        strncpy(((node_page_t*)page)->records[index].value, src, 120);
         return SUCCESS;
     } else {
         return INVALID_PAGE;
     }
 }
-int clearRecord(page_t *page, uint32_t index) {
-    return setKey(page, index, 0) == SUCCESS &&
-           setValue(page, index, "") == SUCCESS ?
-           SUCCESS : INVALID_INDEX;
-}
-int copyRecord(page_t *page1, uint32_t index1, page_t *page2, uint32_t index2) {
-    char buf[120];
-    return  setKey(page1, index1, getKey(page2, index2)) == SUCCESS &&
-            getValue(page2, index2, buf) == SUCCESS &&
-            setValue(page1, index1, buf) == SUCCESS ?
-            SUCCESS : INVALID_INDEX;
-}
-int setRecord(page_t *page, uint32_t index, const record_t* record) {
-    return  setKey(page, index, record->key) == SUCCESS &&
-            setValue(page, index, record->value) == SUCCESS ?
-            SUCCESS : INVALID_INDEX;
-}
+
 offset_t find_leaf( offset_t root, uint64_t key ) {
     offset_t c = root;
     if (c == HEADER_PAGE_OFFSET) {
@@ -344,17 +341,18 @@ offset_t find_leaf( offset_t root, uint64_t key ) {
         // If the page is leaf,
         if (isLeaf(&buf))
             break; // break the loop.
-        // If the page is internal,
 
+        // If the page is internal,
         /* If the given key is smaller than the least key in the page */
         if (key < getKey(&buf, 0)) {
             // Set the search offset to be the one-more-page-leaf-offset.
             c = getOffset(&buf, 0);
         } else {
-            uint64_t index = brsearch_key(&buf, key);
+            int index = binaryRangeSearch(&buf, key);
             if (index == INVALID_KEY)
                 return INVALID_KEY;
-            c = getOffset(&buf, index);
+            // Right side of the index
+            c = getOffset(&buf, index + 1);
         }
     }
     return c;
@@ -369,7 +367,8 @@ record_t * find_record( offset_t root, uint64_t key ) {
 
     page_t leaf_page;
     file_read_page(PGNUM(c), &leaf_page);
-    uint64_t index = bsearch_key(&leaf_page, key);
+
+    int index = binarySearch(&leaf_page, key);
 
     if (index == INVALID_KEY)
         return NULL;
@@ -387,12 +386,18 @@ record_t * find_record( offset_t root, uint64_t key ) {
  * Make an intenal page and return its offset.
  */
 offset_t make_internal( void ) {
-    offset_t new_page_offset = file_alloc_page();
     page_t buf;
+
+    // Allocate one page from the free page list.
+    offset_t new_page_offset = file_alloc_page();
+
     file_read_page(PGNUM(new_page_offset), &buf);
+
     CLEAR(buf);
-    // setInternal(&buf);
+    setInternal(&buf);
+
     file_write_page(PGNUM(new_page_offset), &buf);
+
     return new_page_offset;
 }
 
@@ -400,47 +405,72 @@ offset_t make_internal( void ) {
  * Make a leaf page and return its offset.
  */
 offset_t make_leaf( void ) {
-    offset_t new_page_offset = file_alloc_page();
     page_t buf;
+
+    // Allocate one page from the free page list.
+    offset_t new_page_offset = file_alloc_page();
+
     file_read_page(PGNUM(new_page_offset), &buf);
+
     CLEAR(buf);
     setLeaf(&buf);
+
     file_write_page(PGNUM(new_page_offset), &buf);
+
     return new_page_offset;
 }
 
 /*
  * Get the index of a left page in terms of a parent page.
  */
-// int get_left_index( offset_t parent, offset_t left);
+int get_left_index( offset_t parent_offset, offset_t left_offset ) {
+    page_t parent;
+
+    file_read_page(PGNUM(parent_offset), &parent);
+
+    int num_keys = getNumOfKeys(&parent);
+    int left_index = 0;
+    while (left_index <= num_keys && getOffset(&parent, left_index) != left_offset)
+        left_index++;
+
+    return left_index;
+}
 
 /*
  * Insert a record into a leaf page which has a room to save a record.
  */
-offset_t insert_into_leaf( offset_t leaf, const record_t * pointer ) {
+offset_t insert_into_leaf( offset_t leaf, const record_t * record ) {
     char buf_value[120];
     int i, insertion_point, num_keys;
     page_t buf;
 
     file_read_page(PGNUM(leaf), &buf);
+
+    /* Load the metatdata. */
     num_keys = getNumOfKeys(&buf);
-    uint64_t index = brsearch_key(&buf, pointer->key);
-    if (index == INVALID_KEY)
-        return INVALID_KEY;
 
-    insertion_point = index + 1;
+    /* Find the insertion point by binary search. */
+    if (record->key <  getKey(&buf, 0))
+        insertion_point = 0;
+    else {
+        int index = binaryRangeSearch(&buf, record->key);
+        if (index == INVALID_KEY)
+            return INVALID_KEY;
 
-    for (i = num_keys; i > insertion_point; i--) {
-        copyRecord(&buf, i, &buf, i - 1);
+        insertion_point = index + 1;
     }
-    
-    /* Shifting
-     * 
-     * leaf->keys[insertion_point] = key;
-     * leaf->pointers[insertion_point] = pointer;
-     */
-    setRecord(&buf, insertion_point, pointer); 
 
+    /* Shifting */
+    for (i = num_keys; i > insertion_point; i--) {
+        setKey(&buf, i, getKey(&buf, i - 1));
+        getValue(&buf, i - 1, buf_value);
+        setValue(&buf, i, buf_value);
+    }
+    /* Insertion */
+    setKey(&buf, insertion_point, record->key);
+    setValue(&buf, insertion_point, record->value);
+
+    /* Set Metadata */
     setNumOfKeys(&buf, getNumOfKeys(&buf) + 1);
 
     file_write_page(PGNUM(leaf), &buf);
@@ -451,121 +481,141 @@ offset_t insert_into_leaf( offset_t leaf, const record_t * pointer ) {
  * Insert a record into a leaf page which has no room to save more records.
  * Therefore, first split the leaf page and call insert_into_parent() for pushing up the key.
  */
-offset_t insert_into_leaf_after_splitting( offset_t root, offset_t leaf, const record_t * record) {
-    int insertion_index, split, i, cnt;
-    uint64_t new_key;
-    page_t leaf_page, new_leaf_page;
+offset_t insert_into_leaf_after_splitting( offset_t root_offset, offset_t leaf_offset, const record_t * record) {
+    page_t leaf, new_leaf;
+    offset_t new_leaf_offset;
+    keynum_t temp_keys[DEFAULT_LEAF_ORDER];
+    char temp_values[DEFAULT_LEAF_ORDER][120];
+    int insertion_index, split, new_key, i, j, num_keys;
 
-    offset_t new_leaf = make_leaf();
+    new_leaf_offset = make_leaf();
 
-    file_read_page(PGNUM(leaf), &leaf_page);
-    file_read_page(PGNUM(new_leaf), &new_leaf_page);
+    file_read_page(PGNUM(leaf_offset), &leaf);
+    file_read_page(PGNUM(new_leaf_offset), &new_leaf);
 
-    /*
-     * Insertion Index 찾는 과정
-     */
-    uint64_t index = brsearch_key(&leaf_page, record->key);
-    insertion_index = index + 1;
+    /* Find the Insertion Point */
+    if (record->key < getKey(&leaf, 0))
+        insertion_index = 0;
+    else
+        insertion_index = binaryRangeSearch(&leaf, record->key) + 1;
 
-    // Find the split point.
+    /* Move to temporary space. */
+    for (i = 0, j = 0, num_keys = getNumOfKeys(&leaf); i < num_keys; i++, j++) {
+        if (j == insertion_index) j++;
+        temp_keys[j] = getKey(&leaf, i);
+        getValue(&leaf, i, temp_values[j]);
+    }
+
+    /* Insertion */
+    temp_keys[insertion_index] = record->key;
+    strncpy(temp_values[insertion_index], record->value, 120);
+
+    /* Split */
     split = cut(DEFAULT_LEAF_ORDER - 1);
 
-    /* Insertion Procedure */
-
-    if (insertion_index < split) {
-        for (i = split, cnt = 0; i < DEFAULT_LEAF_ORDER - 1; ++i, ++cnt) {
-            copyRecord(&new_leaf_page, cnt, &leaf_page, i);
-            clearRecord(&leaf_page, i);
-        }
-        for (i = split - 1, cnt = 0; i >= insertion_index; --i, ++cnt) {
-            copyRecord(&leaf_page, i + 1, &leaf_page, i);
-        }
-        setRecord(&leaf_page, i, record);
-    } else {
-        for (i = split, cnt = 0; i < insertion_index; ++i, ++cnt) {
-            copyRecord(&new_leaf_page, cnt, &leaf_page, i);
-            clearRecord(&leaf_page, i);
-        }
-        setRecord(&new_leaf_page, cnt++, record);
-        for (; i < DEFAULT_LEAF_ORDER - 1; ++i, ++cnt) {
-            copyRecord(&new_leaf_page, cnt, &leaf_page, i);
-            clearRecord(&leaf_page, i);
-        }
+    /* Distribute the records into two split leaf nodes. */
+    for (i = 0, num_keys = 0; i < split; i++) {
+        setValue(&leaf, i, temp_values[i]);
+        setKey(&leaf, i, temp_keys[i]);
+        setNumOfKeys(&leaf, ++num_keys);
     }
-    
-    /*
-     * 크기 설정
-     */
 
-    setNumOfKeys(&leaf_page, split);
-    setNumOfKeys(&new_leaf_page, split);
+    for (i = split, j = 0, num_keys = 0; i < DEFAULT_LEAF_ORDER; i++, j++) {
+        setValue(&new_leaf, j, temp_values[i]);
+        setKey(&new_leaf, j, temp_keys[i]);
+        setNumOfKeys(&new_leaf, ++num_keys);
+    }
 
-    /*
-     * Right-sibling-node 연결 과정
-     */
+    /* Set the Right Sibling Offset */
+    setOffset(&new_leaf, DEFAULT_LEAF_ORDER - 1, getOffset(&leaf, DEFAULT_LEAF_ORDER - 1));
+    setOffset(&leaf, DEFAULT_LEAF_ORDER - 1, new_leaf_offset);
 
-    setOffset(&new_leaf_page, DEFAULT_LEAF_ORDER - 1, getOffset(&leaf_page, DEFAULT_LEAF_ORDER - 1));
-    setOffset(&leaf_page, DEFAULT_LEAF_ORDER - 1, new_leaf);
+    /* Clear unused space */
+    for (i = getNumOfKeys(&leaf); i < DEFAULT_LEAF_ORDER - 1; i++) {
+        setKey(&leaf, i, 0);
+        setValue(&leaf, i, "");
+    }
+    for (i = getNumOfKeys(&new_leaf); i < DEFAULT_LEAF_ORDER - 1; i++) {
+        setKey(&new_leaf, i, 0);
+        setValue(&new_leaf, i, "");
+    }
 
-    /*
-     * 부모 노드 설정 과정
-     * 부모로 push up할 새로운 키 획득
-     */
+    /* Set the parent offset */
+    setParentOffset(&new_leaf, getParentOffset(&leaf));
 
-    setParentOffset(&new_leaf_page, getParentOffset(&leaf_page));
-    new_key = getKey(&new_leaf_page, 0);
+    /* Take the first element of new leaf as a push-up key. */
+    new_key = getKey(&new_leaf, 0);
 
-    file_write_page(PGNUM(leaf), &leaf_page);
-    file_write_page(PGNUM(new_leaf), &new_leaf_page);
+    file_write_page(PGNUM(leaf_offset), &leaf);
+    file_write_page(PGNUM(new_leaf_offset), &new_leaf);
 
-    return insert_into_parent(root, leaf, new_key, new_leaf);
+    return insert_into_parent(root_offset, leaf_offset, new_key, new_leaf_offset);
 }
 
 /*
  * Insert a key into an internal page to save a record.
  * To save the key, it has to determine whether to split and whether to push a key.
  */
-offset_t insert_into_parent( offset_t root, offset_t left, uint64_t key, offset_t right ) {
-    page_t parent_page, left_page, right_page;
-    int left_index;
-    offset_t parent;
+offset_t insert_into_parent( offset_t root_offset, offset_t left_offset, uint64_t key, offset_t right_offset ) {
+    int left_index = 0, num_keys;
+    offset_t parent_offset;
+    page_t left, parent;
 
-    // Read the left page.
-    file_read_page(PGNUM(left), &left_page);
+    file_read_page(PGNUM(left_offset), &left);
 
-    // Get the offset of its parent page.
-    parent = getParentOffset(&left_page);
+    parent_offset = getParentOffset(&left);
 
     /* Case: new root. */
 
-    if (parent == HEADER_PAGE_OFFSET)
-        return insert_into_new_root(left, key, right);
+    if (parent_offset == HEADER_PAGE_OFFSET)
+        return insert_into_new_root(left_offset, key, right_offset);
 
-    // Read the parent page.
-    file_read_page(PGNUM(parent), &parent_page);
+    /* Case: leaf or node. (Remainder of function body.)
+     */
 
-    /* Case: leaf or node. (Remainder of function body.) */
+    /* Find the parent's pointer to the left node.
+     */
 
-    /* Find the parent's pointer to the left node. */
+    left_index = get_left_index(parent_offset, left_offset);
 
-    // left_index = get_left_index(parent, left);
-    left_index = bsearch_offset(&parent_page, left);
+    /* Simple case: the new key fits into the node.
+     */
 
-    /* Simple case: the new key fits into the node. */
+    file_read_page(PGNUM(parent_offset), &parent);
+    num_keys = getNumOfKeys(&parent);
+    if (num_keys < DEFAULT_INTERNAL_ORDER - 1)
+        return insert_into_node(root_offset, parent_offset, left_index, key, right_offset);
 
-    if (getNumOfKeys(&parent_page) < DEFAULT_INTERNAL_ORDER - 1)
-        return insert_into_node(root, parent, left_index, key, right);
+    // Exceptional case 발생
+    abort();
 #if 0
-    /* Harder case:  split a node in order to preserve the B+ tree properties. */
+    /* Harder case:  split a node in order to preserve the B+ tree properties.
+     */
 
-    return insert_into_node_after_splitting(root, parent, left_index, key, right);
+    return insert_into_node_after_splitting(root_offset, parent_offset, left_index, key, right_offset);
 #endif
 }
 
 /*
  * Insert a key into a internal page which has a room to save a key.
  */
-// offset_t insert_into_node( offset_t root, offset_t parent, int left_index, uint64_t key, offset_t right);
+offset_t insert_into_node( offset_t root_offset, offset_t parent_offset, int left_index, uint64_t key, offset_t right_offset) {
+    page_t parent;
+    file_read_page(PGNUM(parent_offset), &parent);
+
+    int i, num_keys = getNumOfKeys(&parent);
+
+    for (i = num_keys; i > left_index; i--) {
+        setOffset(&parent, i + 1, getOffset(&parent, i));
+        setKey(&parent, i, getKey(&parent, i - 1));
+    }
+    setOffset(&parent, left_index + 1, right_offset);
+    setKey(&parent, left_index, key);
+    setNumOfKeys(&parent, getNumOfKeys(&parent) + 1);
+
+    file_write_page(PGNUM(parent_offset), &parent);
+    return root_offset;
+}
 
 /*
  * Insert a key into a internal page which has no room to save more keys.
@@ -576,35 +626,26 @@ offset_t insert_into_parent( offset_t root, offset_t left, uint64_t key, offset_
 /*
  * Make a new root page for insertion of the pushup key and insert it into the root page.
  */
-offset_t insert_into_new_root( offset_t left, uint64_t key, offset_t right ){
-     offset_t root = make_internal();
-     
-     page_t page;
+offset_t insert_into_new_root( offset_t left_offset, uint64_t key, offset_t right_offset ) {
+    page_t root, left, right;
+    offset_t root_offset = make_internal();
+    file_read_page(PGNUM(root_offset), &root);
+    file_read_page(PGNUM(left_offset), &left);
+    file_read_page(PGNUM(right_offset), &right);
 
-     // Set Root Page
-     file_read_page(PGNUM(root), &page);
-     setKey(&page, 0, key);
-     setOffset(&page, 0, left);
-     setOffset(&page, 1, right);
-     setNumOfKeys(&page, 1);
-     file_write_page(PGNUM(root), &page);
-     
-     // Set Left Parent
-     file_read_page(PGNUM(left), &page);
-     setParentOffset(&page, root);
-     file_write_page(PGNUM(left), &page);
-     
-     // Set Right Parent
-     file_read_page(PGNUM(right), &page);
-     setParentOffset(&page, root);
-     file_write_page(PGNUM(right), &page);
+    setKey(&root, 0, key);
+    setOffset(&root, 0, left_offset);
+    setOffset(&root, 1, right_offset);
+    setNumOfKeys(&root, 1);
+    setParentOffset(&root, HEADER_PAGE_OFFSET);
+    setParentOffset(&left, root_offset);
+    setParentOffset(&right, root_offset);
 
-     // Update the header page.
-     file_read_page(HEADER_PAGE_NUM, &header);
-     setRootPageOffset(&header, root);
-     file_write_page(HEADER_PAGE_NUM, &header);
+    file_write_page(PGNUM(root_offset), &root);
+    file_write_page(PGNUM(left_offset), &left);
+    file_write_page(PGNUM(right_offset), &right);
 
-     return root;
+    return root_offset;
 }
 
 /*
@@ -613,15 +654,15 @@ offset_t insert_into_new_root( offset_t left, uint64_t key, offset_t right ){
 offset_t start_new_tree( const record_t* record ) {
     offset_t root = make_leaf();
     page_t buf;
+
     file_read_page(PGNUM(root), &buf);
+
     setKey(&buf, 0, record->key);
     setValue(&buf, 0, record->value);
     setNumOfKeys(&buf, 1);
+
     file_write_page(PGNUM(root), &buf);
 
-    file_read_page(HEADER_PAGE_NUM, &header);
-    setRootPageOffset(&header, root);
-    file_write_page(HEADER_PAGE_NUM, &header);
     return root;
 }
 
@@ -634,13 +675,15 @@ offset_t start_new_tree( const record_t* record ) {
 
 offset_t insert_record( offset_t root, const record_t * record ) {
     record_t * pointer;
+    page_t buf;
 
     /* The current implementation ignores duplicates.
      */
 
+    // Duplicated
     if ((pointer = find_record(root, record->key)) != NULL) {
         free(pointer);
-        return KEY_EXIST; // Duplicated
+        return root;
     }
 
     /* Case: the tree does not exist yet.
@@ -656,7 +699,6 @@ offset_t insert_record( offset_t root, const record_t * record ) {
 
     offset_t leaf = find_leaf(root, record->key);
 
-    page_t buf;
     file_read_page(PGNUM(leaf), &buf);
 
     /* Case: leaf has room for key and pointer.
@@ -667,7 +709,8 @@ offset_t insert_record( offset_t root, const record_t * record ) {
         return root;
     }
 
-    /* Case:  leaf must be split. */
+    /* Case:  leaf must be split.
+     */
 
     return insert_into_leaf_after_splitting(root, leaf, record);
 }
@@ -682,8 +725,8 @@ int cut( int length ) {
         return length / 2 + 1;
 }
 
-uint64_t bsearch_key(const page_t *page, uint64_t key) {
-    uint64_t l = 0, r = getNumOfKeys(page) - 1, m, middle_key;
+int binarySearch(const page_t *page, uint64_t key) {
+    int l = 0, r = getNumOfKeys(page) - 1, m, middle_key;
     while (l <= r) {
         m = (l + r) / 2;
         middle_key = getKey(page, m);
@@ -697,9 +740,9 @@ uint64_t bsearch_key(const page_t *page, uint64_t key) {
     return INVALID_KEY; /* cannot find the given key in the page */
 }
 
-uint64_t brsearch_key(const page_t *page, uint64_t key) {
+int binaryRangeSearch(const page_t *page, uint64_t key) {
     /* Modified Version of Binary Search */
-    uint64_t l = 0, r = getNumOfKeys(page), m, middle_key;
+    int l = 0, r = getNumOfKeys(page), m, middle_key;
     while (l < r) {
         m = (l + r) / 2;
 
@@ -715,50 +758,41 @@ uint64_t brsearch_key(const page_t *page, uint64_t key) {
     return INVALID_KEY; /* No Key is provided. */
 }
 
-// Binary Search for the offset
-uint64_t bsearch_offset(const page_t *page, offset_t offset){
-    uint64_t l = 0, r = getNumOfKeys(page) - 1, m;
-    offset_t middle_offset;
-    while (l <= r) {
-        m = (l + r) / 2;
-        middle_offset = getOffset(page, m);
-        if (middle_offset < offset)
-            l = m + 1;
-        else if (middle_offset > offset)
-            r = m - 1;
-        else
-            return m;
-    }
-    return INVALID_OFFSET; /* cannot find the given offset in the page */
-}
+void enqueue( offset_t new_node_offset, int depth ) {
+    node *c, *new_node = malloc(sizeof(node));
 
-void enqueue( offset_t new_node, int depth ){
-    node* c, *temp = malloc(sizeof(node));
+    if (!new_node)
+        return;
+
+    new_node->offset = new_node_offset;
+    new_node->depth = depth;
+    new_node->next = NULL;
+
     if (queue == NULL) {
-        queue = temp;
-        queue->depth = depth;
-        queue->offset = new_node;
-        queue->next = NULL;
-    }
-    else {
+        queue = new_node;
+    } else {
         c = queue;
         while (c->next != NULL) {
             c = c->next;
         }
-        c->depth = depth;
-        c->next = temp;
-        c->next->offset = new_node;
-        c->next->next = NULL;
+        c->next = new_node;
     }
 }
 
-offset_t dequeue( int* depth ){
-    if (!queue) return HEADER_PAGE_OFFSET;
-    node * n = queue;
+offset_t dequeue( int *depth ) {
+    if (!queue)
+        return HEADER_PAGE_OFFSET;
+
+    offset_t ret;
+    node * n;
+
+    n = queue;
     queue = queue->next;
+    ret = n->offset;
+    if (depth)
+        *depth = n->depth;
     n->next = NULL;
-    offset_t ret = n->offset;
-    *depth = n->depth;
+
     free(n);
     return ret;
 }
@@ -776,7 +810,7 @@ void print_leaves( offset_t root ) {
         c = getOffset(&buf, 0);
     while (true) {
         for (i = 0, num_keys = getNumOfKeys(&buf); i < num_keys; i++) {
-            printf("%lu ", getKey(&buf, i));
+            printf("%d ", getKey(&buf, i));
         }
         if (getOffset(&buf, DEFAULT_LEAF_ORDER - 1) != HEADER_PAGE_OFFSET) {
             printf(" | ");
@@ -789,7 +823,7 @@ void print_leaves( offset_t root ) {
 }
 
 void print_tree ( offset_t root ) {
-    int i = 0, level = 0, node_level;
+    int i = 0, search_level = 0, node_level;
     int num_keys;
 
     page_t buf;
@@ -799,24 +833,25 @@ void print_tree ( offset_t root ) {
         printf("Empty tree.\n");
         return;
     }
+
     queue = NULL;
-    enqueue(root, 0);
+    enqueue(root, search_level);
     while ( queue != NULL ) {
         c = dequeue(&node_level);
-        if(node_level > level){
-            level = node_level;
-            printf("\n");
+        file_read_page(PGNUM(c), &buf);
+
+        if (search_level < node_level) {
+            puts("");
+            search_level = node_level;
         }
 
-        file_read_page(PGNUM(c), &buf);
         num_keys = getNumOfKeys(&buf);
         for (i = 0; i < num_keys; i++) {
-            printf("%lu ", getKey(&buf, i));
+            printf("%d ", getKey(&buf, i));
         }
-        if (!isLeaf(&buf)){
+        if (!isLeaf(&buf))
             for (i = 0; i <= num_keys; i++)
                 enqueue(getOffset(&buf, i), node_level + 1);
-        }
         printf("| ");
     }
     printf("\n");
@@ -827,7 +862,7 @@ void usage(void) {
             "\ti <k>  -- Insert <k> (an integer) as both key and value).\n"
             "\tf <k>  -- Find the value under key <k>.\n"
             "\tp <k> -- Print the path from the root to key k and its associated value.\n"
-            "\tr <k1> <k2> -- Print the keys and values found in the range [<k1>, <k2>\n"
+            "\tr <k1> <k2> -- Print the keys and values found in the range [<k1>, <k2>]\n"
             "\td <k>  -- Delete key <k> and its associated value.\n"
             "\tx -- Destroy the whole tree.  Start again with an empty tree of the same order.\n"
             "\tt -- Print the B+ tree.\n"

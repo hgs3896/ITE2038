@@ -216,10 +216,10 @@ int setNextFreePageOffset(page_t *page, offset_t next_free_page_offset);
 // for Node Page
 // -> Getters
 offset_t getParentOffset(const page_t *page);
-uint32_t isLeaf(const page_t *page);
-uint32_t getNumOfKeys(const page_t *page);
-uint64_t getKey(const page_t *page, uint32_t index);
-uint64_t getOffset(const page_t *page, uint32_t index);
+int isLeaf(const page_t *page);
+int getNumOfKeys(const page_t *page);
+int getKey(const page_t *page, uint32_t index);
+offset_t getOffset(const page_t *page, uint32_t index);
 int getValue(const page_t *page, uint32_t index, char *desc);
 // -> Setters
 int setParentOffset(page_t *page, offset_t offset);
@@ -229,22 +229,14 @@ int setNumOfKeys(page_t *page, uint32_t num_keys);
 int setKey(page_t *page, uint32_t index, uint64_t key);
 int setOffset(page_t *page, uint32_t index, uint64_t offset);
 int setValue(page_t *page, uint32_t index, const char *src);
-int setRecord(page_t *page, uint32_t index, const record_t* record);
-int clearRecord(page_t *page, uint32_t index);
-int copyRecord(page_t *page1, uint32_t index1, page_t *page2, uint32_t index2);
 
 // Utility
 
 int cut( int length );
-// Binary Search for the key
-uint64_t bsearch_key(const page_t *page, uint64_t key);
-// Binary Range Search for the key
-uint64_t brsearch_key(const page_t *page, uint64_t key);
-// Binary Search for the offset
-uint64_t bsearch_offset(const page_t *page, offset_t offset);
-
+int binarySearch(const page_t *page, uint64_t key);
+int binaryRangeSearch(const page_t *page, uint64_t key);
 void enqueue( offset_t new_node, int depth );
-offset_t dequeue( int* depth );
+offset_t dequeue( int *depth );
 void print_leaves( offset_t root );
 void print_tree( offset_t root );
 
