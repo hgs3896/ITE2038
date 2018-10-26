@@ -1,17 +1,18 @@
 #include "bpt.h"
-
+#define TESTMODE 1
 // MAIN
 
 int main( int argc, char ** argv ) {
-
+#if !TESTMODE
     usage();
-
+#endif
     int input, range2;
     char instruction, value[1024];
 
-    open_db("fuck_you.db");
-
+    open_db("test.db");
+#if !TESTMODE
     printf("> ");
+#endif
     while (scanf("%c", &instruction) != EOF) {
         switch (instruction) {
         case 'd':
@@ -22,14 +23,18 @@ int main( int argc, char ** argv ) {
         case 'i':
             scanf("%d", &input);
             scanf("%s", value);
-            insert(input, value);
-            print_tree(getRootPageOffset(&header));
+            insert(input, value);            
+            // print_tree(getRootPageOffset(&header));
             break;
         case 'f':
             scanf("%d\b", &input);
-            char * str = find(input);
-            printf("%s\n", str ? str : "Not Found");
+            char *str = find(input);
+            if(str)
+                printf("Key: %d, Value: %s\n", input, str);
+            else
+                printf("Not Exist\n");
             free(str);
+
             break;
         case 'p':
             scanf("%d", &input);
@@ -62,11 +67,15 @@ int main( int argc, char ** argv ) {
             //print_tree(root);
             break;
         default:
+        #if !TESTMODE
             usage();
+        #endif
             break;
         }
         while (getchar() != (int)'\n');
+        #if !TESTMODE
         printf("> ");
+        #endif
     }
     printf("\n");
 
