@@ -1,11 +1,12 @@
 #include "bpt.h"
-#define TESTMODE 1
+#define TESTMODE 0
 // MAIN
 
 int main( int argc, char ** argv ) {
 #if !TESTMODE
     usage();
 #endif
+    offset_t root;
     int input, range2;
     char instruction, value[1024];
 
@@ -14,6 +15,7 @@ int main( int argc, char ** argv ) {
     printf("> ");
 #endif
     while (scanf("%c", &instruction) != EOF) {
+        root = getRootPageOffset(&header);
         switch (instruction) {
         case 'd':
             scanf("%d", &input);
@@ -23,18 +25,14 @@ int main( int argc, char ** argv ) {
         case 'i':
             scanf("%d", &input);
             scanf("%s", value);
-            insert(input, value);            
-            // print_tree(getRootPageOffset(&header));
+            insert(input, value);
             break;
         case 'f':
             scanf("%d\b", &input);
             char *str = find(input);
-            if(str)
-                printf("Key: %d, Value: %s\n", input, str);
-            else
-                printf("Not Exist\n");
+            if(str) printf("Key: %d, Value: %s\n", input, str);
+            else    printf("Not Exist\n");
             free(str);
-
             break;
         case 'p':
             scanf("%d", &input);
@@ -47,17 +45,17 @@ int main( int argc, char ** argv ) {
                 range2 = input;
                 input = tmp;
             }
-            // find_and_print_range(root, input, range2, instruction == 'p');
+            find_and_print_range(root, input, range2);
             break;
         case 'l':
-            print_leaves(getRootPageOffset(&header));
+            print_leaves(root);
             break;
         case 'q':
             while (getchar() != (int)'\n');
             return EXIT_SUCCESS;
             break;
         case 't':
-            print_tree(getRootPageOffset(&header));
+            print_tree(root);
             break;
         case 'x':
             /*

@@ -150,13 +150,13 @@ union page_t
     Find the record containing input ‘key’.
     If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
 */
-char * find (int64_t key);
+char * find (keynum_t key);
 
 /*
  *  Insert input ‘key/value’ (record) to data file at the right place.
  *  If success, return 0. Otherwise, return non-zero value.
  */
-int insert (int64_t key, char * value);
+int insert (keynum_t key, char * value);
 
 /*
  *  Allocate an on-disk page from the free page list
@@ -188,7 +188,7 @@ int open_db (char *pathname);
  *  Find the matching record and delete it if found.
  *  If success, return 0. Otherwise, return non-zero value.
  */
-int delete (int64_t key);
+int delete (keynum_t key);
 
 /*
  *  Flush and Sync the buffer and exit.
@@ -218,7 +218,7 @@ int setNextFreePageOffset(page_t *page, offset_t next_free_page_offset);
 offset_t getParentOffset(const page_t *page);
 int isLeaf(const page_t *page);
 int getNumOfKeys(const page_t *page);
-int getKey(const page_t *page, uint32_t index);
+keynum_t getKey(const page_t *page, uint32_t index);
 offset_t getOffset(const page_t *page, uint32_t index);
 int getValue(const page_t *page, uint32_t index, char *desc);
 // -> Setters
@@ -226,25 +226,27 @@ int setParentOffset(page_t *page, offset_t offset);
 int setLeaf(page_t *page);
 int setInternal(page_t *page);
 int setNumOfKeys(page_t *page, uint32_t num_keys);
-int setKey(page_t *page, uint32_t index, uint64_t key);
-int setOffset(page_t *page, uint32_t index, uint64_t offset);
+int setKey(page_t *page, uint32_t index, keynum_t key);
+int setOffset(page_t *page, uint32_t index, offset_t offset);
 int setValue(page_t *page, uint32_t index, const char *src);
 
 // Utility
 
 int cut( int length );
-int binarySearch(const page_t *page, uint64_t key);
-int binaryRangeSearch(const page_t *page, uint64_t key);
+int binarySearch( const page_t *page, keynum_t key );
+int binaryRangeSearch( const page_t *page, keynum_t key );
 void enqueue( offset_t new_node, int depth );
 offset_t dequeue( int *depth );
 void print_leaves( offset_t root );
 void print_tree( offset_t root );
+int find_range( offset_t root, keynum_t key_start, keynum_t key_end, record_t records[] );
+void find_and_print_range( offset_t root, keynum_t key_start, keynum_t key_end);
 
 // Search
 
 /* Find where the given key is located and return the leaf page offset which it has the key.*/
-offset_t find_leaf( offset_t root, uint64_t key );
-record_t * find_record( offset_t root, uint64_t key ); // needs to be free after the call
+offset_t find_leaf( offset_t root, keynum_t key );
+record_t * find_record( offset_t root, keynum_t key ); // needs to be free after the call
 
 // Insertion
 

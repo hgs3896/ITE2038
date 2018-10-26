@@ -4,7 +4,7 @@
  *  Find the record containing input ‘key’.
  *  If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
  */
-char * find (int64_t key) {
+char * find (keynum_t key) {
     record_t* record;
 
     file_read_page(HEADER_PAGE_NUM, &header);
@@ -22,7 +22,7 @@ char * find (int64_t key) {
  *  Insert input ‘key/value’ (record) to data file at the right place.
  *  If success, return 0. Otherwise, return non-zero value.
  */
-int insert (int64_t key, char * value) {
+int insert (keynum_t key, char * value) {
     record_t record;
 
     // Set the data
@@ -216,17 +216,17 @@ int isLeaf(const page_t *page) {
 int getNumOfKeys(const page_t *page) {
     return ((const node_page_t*)page)->num_keys;
 }
-int getKey(const page_t *page, uint32_t index) {
+keynum_t getKey(const page_t *page, uint32_t index) {
     if (!isLeaf(page)) {
         // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER - 1
-        if (index >= DEFAULT_INTERNAL_ORDER - 1 || index < 0) {
+        if (index >= DEFAULT_INTERNAL_ORDER - 1) {
             return INVALID_INDEX;
         } else {
             return ((const node_page_t*)page)->pairs[index].key;
         }
     } else {
         // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER - 1 || index < 0)
+        if (index >= DEFAULT_LEAF_ORDER - 1)
             return INVALID_INDEX;
         else
             return ((const node_page_t*)page)->records[index].key;
@@ -243,7 +243,7 @@ offset_t getOffset(const page_t *page, uint32_t index) {
             return ((const node_page_t*)page)->pairs[index - 1].offset;
     } else {
         // Leaf Page : index = DEFAULT_LEAF_ORDER - 1
-        if (index == DEFAULT_LEAF_ORDER)
+        if (index == DEFAULT_LEAF_ORDER - 1)
             return ((const node_page_t*)page)->right_sibling_page_offset;
         else
             return INVALID_INDEX;
@@ -252,7 +252,7 @@ offset_t getOffset(const page_t *page, uint32_t index) {
 int getValue(const page_t *page, uint32_t index, char *desc) {
     if (isLeaf(page)) {
         // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER || index < 0) {
+        if (index >= DEFAULT_LEAF_ORDER - 1) {
             return INVALID_INDEX;
         }
         strncpy(desc, ((const node_page_t*)page)->records[index].value, 120);
@@ -288,7 +288,7 @@ int setKey(page_t *page, uint32_t index, uint64_t key) {
         return SUCCESS;
     } else {
         // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER)
+        if (index >= DEFAULT_LEAF_ORDER - 1)
             return INVALID_INDEX;
 
         ((node_page_t*)page)->records[index].key = key;
@@ -297,7 +297,7 @@ int setKey(page_t *page, uint32_t index, uint64_t key) {
 int setOffset(page_t *page, uint32_t index, uint64_t offset) {
     if (!isLeaf(page)) {
         // Internal Page : 0 ≤ index < DEFAULT_INTERNAL_ORDER
-        if (index >= DEFAULT_INTERNAL_ORDER | index < 0)
+        if (index >= DEFAULT_INTERNAL_ORDER)
             return INVALID_INDEX;
         else if (index == 0)
             ((node_page_t*)page)->one_more_page_offset = offset;
@@ -306,18 +306,18 @@ int setOffset(page_t *page, uint32_t index, uint64_t offset) {
         return SUCCESS;
     } else {
         // Leaf Page : index == DEFAULT_LEAF_ORDER - 1
-        if (index != DEFAULT_LEAF_ORDER - 1) {
-            return INVALID_INDEX;
-        } else {
+        if (index == DEFAULT_LEAF_ORDER - 1) {
             ((node_page_t*)page)->right_sibling_page_offset = offset;
             return SUCCESS;
+        } else {
+            return INVALID_INDEX;
         }
     }
 }
 int setValue(page_t *page, uint32_t index, const char *src) {
     if (isLeaf(page)) {
         // Leaf Page : 0 ≤ index < DEFAULT_LEAF_ORDER - 1
-        if (index >= DEFAULT_LEAF_ORDER | index < 0) {
+        if (index >= DEFAULT_LEAF_ORDER - 1) {
             return INVALID_INDEX;
         }
 
@@ -876,18 +876,20 @@ void print_leaves( offset_t root ) {
         return;
     }
     file_read_page(PGNUM(c), &buf);
-    while (!isLeaf(&buf))
+    while (!isLeaf(&buf)) {
         c = getOffset(&buf, 0);
+        file_read_page(PGNUM(c), &buf);
+    }
     while (true) {
         for (i = 0, num_keys = getNumOfKeys(&buf); i < num_keys; i++) {
-            printf("%d ", getKey(&buf, i));
+            printf("%lu ", getKey(&buf, i));
         }
         if (getOffset(&buf, DEFAULT_LEAF_ORDER - 1) != HEADER_PAGE_OFFSET) {
             printf(" | ");
             c = getOffset(&buf, DEFAULT_LEAF_ORDER - 1);
+            file_read_page(PGNUM(c), &buf);
         }
-        else
-            break;
+        else break;
     }
     printf("\n");
 }
@@ -917,7 +919,7 @@ void print_tree ( offset_t root ) {
 
         num_keys = getNumOfKeys(&buf);
         for (i = 0; i < num_keys; i++) {
-            printf("%d ", getKey(&buf, i));
+            printf("%lu ", getKey(&buf, i));
         }
         if (!isLeaf(&buf))
             for (i = 0; i <= num_keys; i++)
@@ -925,6 +927,54 @@ void print_tree ( offset_t root ) {
         printf("| ");
     }
     printf("\n");
+}
+
+int find_range( offset_t root, keynum_t key_start, keynum_t key_end, record_t records[] ) {
+    int i, num_found, num_keys;
+    page_t page;
+    offset_t p = find_leaf( root, key_start );
+    if (p == HEADER_PAGE_OFFSET)
+        return 0;
+
+
+    file_read_page(PGNUM(p), &page);
+
+    i = binaryRangeSearch(&page, key_start);
+    num_keys = getNumOfKeys(&page);
+
+    if (i == num_keys)
+        return 0;
+
+    num_found = 0;
+    while (true) {
+        for ( ; i < num_keys && getKey(&page, i) <= key_end; i++) {
+            records[num_found].key = getKey(&page, i);
+            getValue(&page, i, records[num_found].value);
+            num_found++;
+        }
+        p = getOffset(&page, DEFAULT_LEAF_ORDER - 1);
+        i = 0;
+
+        if (p == HEADER_PAGE_OFFSET)
+            break;
+
+        file_read_page(PGNUM(p), &page);
+        num_keys = getNumOfKeys(&page);
+    }
+    return num_found;
+}
+
+void find_and_print_range( offset_t root, keynum_t key_start, keynum_t key_end) {
+    int i;
+    int array_size = key_end - key_start + 1;
+    record_t records[array_size];
+    int num_found = find_range( root, key_start, key_end, records );
+    if (!num_found)
+        printf("None found.\n");
+    else {
+        for (i = 0; i < num_found; i++)
+            printf("Key: %lu\tValue: %s\n", records[i].key, records[i].value);
+    }
 }
 
 void usage(void) {
