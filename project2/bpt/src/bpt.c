@@ -807,7 +807,6 @@ offset_t insert_record( offset_t root, const record_t * record ) {
     return insert_into_leaf_after_splitting(root, leaf, record);
 }
 
-#if !TESTMODE
 // Deletion
 offset_t delete_record( offset_t root, keynum_t key ) {
     offset_t key_leaf;
@@ -821,6 +820,7 @@ offset_t delete_record( offset_t root, keynum_t key ) {
     free(key_record);
     return root;
 }
+
 offset_t delete_entry( offset_t root, offset_t key_leaf, const record_t* record ) {
     int num_keys;
 
@@ -846,6 +846,7 @@ offset_t delete_entry( offset_t root, offset_t key_leaf, const record_t* record 
 
     return root;
 }
+
 int remove_entry_from_node( offset_t key_leaf_offset, const record_t* record ) {
     int i, j, num_pointers, num_keys;
     page_t leaf;
@@ -876,6 +877,7 @@ int remove_entry_from_node( offset_t key_leaf_offset, const record_t* record ) {
 
     return num_keys;
 }
+
 offset_t adjust_root( offset_t root_offset ) {
     offset_t new_root_offset;
 
@@ -913,6 +915,7 @@ offset_t adjust_root( offset_t root_offset ) {
 
     return new_root_offset;
 }
+
 offset_t coalesce_nodes( offset_t root, offset_t node_to_free ){
     page_t free_page, parent_page;
     offset_t parent_offset, neighbor_offset;
@@ -981,6 +984,7 @@ offset_t coalesce_nodes( offset_t root, offset_t node_to_free ){
     file_free_page(PGNUM(node_to_free));
     return root;
 }
+
 offset_t get_neighbor_offset( offset_t n ){
     int i, num_keys;
     page_t buf;
@@ -1008,7 +1012,7 @@ offset_t get_neighbor_offset( offset_t n ){
 
     return HEADER_PAGE_OFFSET;    
 }
-#endif
+
 /* Finds the appropriate place to
  * split a node that is too big into two.
  */
