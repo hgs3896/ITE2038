@@ -1,5 +1,4 @@
 #include "bpt.h"
-#define TESTMODE 0
 // MAIN
 
 int main( int argc, char ** argv ) {
@@ -19,7 +18,7 @@ int main( int argc, char ** argv ) {
         switch (instruction) {
         case 'd':
             scanf("%d", &input);
-            // root = delete(root, input);
+            delete(input);
             // print_tree(root);
             break;
         case 'i':
@@ -49,6 +48,17 @@ int main( int argc, char ** argv ) {
             break;
         case 'l':
             print_leaves(root);
+            break;
+        case 'D':
+            scanf("%d %d", &input, &range2);
+            if (input > range2) {
+                int tmp = range2;
+                range2 = input;
+                input = tmp;
+            }
+            while(input <= range2){
+                delete(input++);
+            }
             break;
         case 'q':
             while (getchar() != (int)'\n');

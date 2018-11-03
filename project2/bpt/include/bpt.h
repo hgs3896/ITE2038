@@ -1,6 +1,8 @@
 #ifndef __BPT_H__
 #define __BPT_H__
 
+#define TESTMODE 0
+
 #define Version "1.00"
 
 #include <stdint.h>
@@ -307,6 +309,14 @@ offset_t start_new_tree( const record_t* record );
  * Insert a record into the disk-based B+tree.
  */
 offset_t insert_record( offset_t root, const record_t * record );
+
+// Deletion
+offset_t delete_record( offset_t root, keynum_t key );
+offset_t delete_entry( offset_t root, offset_t key_leaf, const record_t* record );
+int remove_entry_from_node( offset_t key_leaf, const record_t* record );
+offset_t adjust_root( offset_t root );
+offset_t coalesce_nodes( offset_t root, offset_t node_to_free );
+offset_t get_neighbor_offset( offset_t n );
 
 /*
  * Print usage about the commands used to control the disk-based B+tree.
