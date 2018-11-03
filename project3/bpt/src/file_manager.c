@@ -5,17 +5,70 @@
 #include "delete.h"
 
 #include <stdio.h>
-#include <stdlib.h> /* malloc, free, atexit */
-#include <string.h>
-#include <fcntl.h> /* file control */
-#include <sys/stat.h> /* system constants */
-#include <unistd.h> /* open, close */
+
+/*
+ * Initialize buffer pool with given number and buffer manager.
+ */
+int init_db (int buf_num){
+
+}
+
+/*
+ * Open existing data file using ‘pathname’ or create one if not existed.
+ * If success, return table_id.
+ */
+int open_table (char * pathname){
+    if (pathname == NULL)
+        return INVALID_FILENAME;
+
+    if (fd != 0)
+        return INVALID_FD; // FD is already open!
+
+    // Make a file if it does not exist.
+    // Do not use a symbolic link.
+    // Flush the buffer whenever try to write.
+    // Permission is set to 0644.
+    fd = open(pathname, O_CREAT | O_RDWR | O_NOFOLLOW | O_SYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+
+    // Add a handler which is to be executed before the process exits.
+    atexit(when_exit);
+
+    if (fd == -1) {
+        perror("open_db error");
+        return INVALID_FD;
+    }
+
+    // Read the header from the file
+    if (READ(header) == 0) {
+        // If the header page doesn't exist, create a new one.
+        CLEAR(header);
+        setNumOfPages(&header, 1); // the number of created pages
+        WRITE(header);
+    }
+
+    return /* unique table id */;
+}
+
+/*
+ * Write the pages relating to this table to disk and close the table.
+ */
+int close_table(int table_id){
+
+}
+
+/*
+ * Destroy buffer manager.
+ */
+int shutdown_db(void){
+
+}
+
 
 /*
  *  Find the record containing input ‘key’.
  *  If found matching ‘key’, return matched ‘value’ string. Otherwise, return NULL.
  */
-char * find (keynum_t key) {
+char * find (int table_id, keynum_t key) {
     record_t* record;
 
     file_read_page(HEADER_PAGE_NUM, &header);
@@ -33,7 +86,7 @@ char * find (keynum_t key) {
  *  Insert input ‘key/value’ (record) to data file at the right place.
  *  If success, return 0. Otherwise, return non-zero value.
  */
-int insert (keynum_t key, char * value) {
+int insert (int table_id, keynum_t key, char * value) {
     record_t record;
 
     // Set the data
@@ -51,6 +104,29 @@ int insert (keynum_t key, char * value) {
     file_write_page(HEADER_PAGE_NUM, &header);
 
     return root_offset == KEY_EXIST;
+}
+
+/*
+ *  Find the matching record and delete it if found.
+ *  If success, return 0. Otherwise, return non-zero value.
+ */
+int delete(int table_id, keynum_t key){
+    file_read_page(HEADER_PAGE_NUM, &header);
+
+    // Insert the record
+    offset_t root_offset = delete_record( getRootPageOffset(&header), key );
+
+    if(root_offset != KEY_EXIST){
+        // Update the root offset
+        file_read_page(HEADER_PAGE_NUM, &header);
+
+        // Reset the Root Page Offset.
+        setRootPageOffset(&header, root_offset);
+
+        file_write_page(HEADER_PAGE_NUM, &header);
+        return SUCCESS;
+    }
+    return -1;    
 }
 
 /*
@@ -131,65 +207,6 @@ void file_read_page(pagenum_t pagenum, page_t* dest) {
 void file_write_page(pagenum_t pagenum, const page_t* src) {
     SEEK(OFFSET(pagenum));
     WRITE(*src);
-}
-
-/*
- *  Open existing data file using ‘pathname’ or create one if not existed.
- *  If success, return 0. Otherwise, return non-zero value.
- */
-int open_db (char *pathname) {
-    if (pathname == NULL)
-        return INVALID_FILENAME;
-
-    if (fd != 0)
-        return INVALID_FD; // FD is already open!
-
-    // Make a file if it does not exist.
-    // Do not use a symbolic link.
-    // Flush the buffer whenever try to write.
-    // Permission is set to 0644.
-    fd = open(pathname, O_CREAT | O_RDWR | O_NOFOLLOW | O_SYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
-
-    // Add a handler which is to be executed before the process exits.
-    atexit(when_exit);
-
-    if (fd == -1) {
-        perror("open_db error");
-        return INVALID_FD;
-    }
-
-    // Read the header from the file
-    if (READ(header) == 0) {
-        // If the header page doesn't exist, create a new one.
-        CLEAR(header);
-        setNumOfPages(&header, 1); // the number of created pages
-        WRITE(header);
-    }
-
-    return SUCCESS;
-}
-
-/*
- *  Find the matching record and delete it if found.
- *  If success, return 0. Otherwise, return non-zero value.
- */
-int delete(keynum_t key){
-    file_read_page(HEADER_PAGE_NUM, &header);
-
-    // Insert the record
-    offset_t root_offset = delete_record( getRootPageOffset(&header), key );
-
-    if(root_offset != KEY_EXIST){
-        // Update the root offset
-        file_read_page(HEADER_PAGE_NUM, &header);
-
-        // Reset the Root Page Offset.
-        setRootPageOffset(&header, root_offset);
-
-        file_write_page(HEADER_PAGE_NUM, &header);
-        return SUCCESS;
-    }
-    return -1;    
 }
 
 /*
