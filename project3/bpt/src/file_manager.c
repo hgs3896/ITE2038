@@ -1,16 +1,27 @@
 #include "file_manager.h"
 
 #include "page_access_manager.h"
+#include "buffer_manager.h"
 #include "insert.h"
 #include "delete.h"
 
 #include <stdio.h>
 
 /*
+ * For automatic DB shutdown
+ */
+static bool initialized = false;
+/*
+ * File Descriptor for R/W
+ */
+static int fds[DEFAULT_SIZE_OF_TABLES];
+int fd;
+
+/*
  * Initialize buffer pool with given number and buffer manager.
  */
 int init_db (int buf_num){
-
+    init_buf(buf_num);
 }
 
 /*
@@ -21,46 +32,80 @@ int open_table (char * pathname){
     if (pathname == NULL)
         return INVALID_FILENAME;
 
-    if (fd != 0)
-        return INVALID_FD; // FD is already open!
+    // Find an empty slot for file descriptor.
+    int idx = 0;
+    
+    while( fds[idx] != 0 )
+        idx++;
+
+    if(idx >= DEFAULT_SIZE_OF_TABLES)    
+        return FULL_FD; // FD slots are full.
 
     // Make a file if it does not exist.
-    // Do not use a symbolic link.
+    // Do not allow a symbolic link to open.
     // Flush the buffer whenever try to write.
     // Permission is set to 0644.
-    fd = open(pathname, O_CREAT | O_RDWR | O_NOFOLLOW | O_SYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+    fds[idx] = open(
+        pathname,
+        O_CREAT | O_RDWR  | O_NOFOLLOW | O_SYNC, // Options
+        S_IRUSR | S_IWUSR | S_IRGRP    | S_IROTH // Permissions
+    );
 
-    // Add a handler which is to be executed before the process exits.
-    atexit(when_exit);
+    if(!initialized){
+        // Add a handler to be executed before the process exits.
+        atexit(shutdown_db);
 
-    if (fd == -1) {
+        initialized = true;
+    }
+
+    if (fds[idx] == -1) {
         perror("open_db error");
         return INVALID_FD;
     }
 
     // Read the header from the file
-    if (READ(header) == 0) {
+    if (READ(fds[idx], &header) == 0) {
         // If the header page doesn't exist, create a new one.
-        CLEAR(header);
+        CLEAR(&header);
         setNumOfPages(&header, 1); // the number of created pages
-        WRITE(header);
+        WRITE(fds[idx], &header);
     }
 
-    return /* unique table id */;
+    /* unique table id */
+    return fd = idx;
 }
 
 /*
  * Write the pages relating to this table to disk and close the table.
+ *  - Write all pages of this table from buffer to disk and discard the table id.
+ *  - If success, return 0. Otherwise, return non-zero value.
  */
 int close_table(int table_id){
+    // writes out the pages only from those relating to given table_id
+    // writes out all dirty buffer block to disk.
+    if(table_id >= 0 && table_id < DEFAULT_SIZE_OF_TABLES && fds[table_id] != 0){
+        // table_id에 해당하는 버퍼에 남은 dirty한 버퍼를 다 flush!
+        flush_buf(table_id);
 
+        // fsync(fds[table_id]);
+
+        close(fds[table_id]);
+        fds[table_id] = 0;
+        return 0;
+    }
+    return -1;
 }
 
 /*
  * Destroy buffer manager.
+ *  - Flush all data from buffer and destroy allocated buffer.
+ *  - If success, return 0. Otherwise, return non-zero value.
  */
 int shutdown_db(void){
-
+    // writes out all dirty buffer block to disk.
+    int i;
+    for(i=0;i<DEFAULT_SIZE_OF_TABLES;++i)
+        close_table(i);
 }
 
 
@@ -146,7 +191,7 @@ pagenum_t file_alloc_page() {
     page_t buf;
 
     if (getFreePageOffset(&header) == HEADER_PAGE_OFFSET) {
-        CLEAR(buf);
+        CLEAR(&buf);
         int i;
         pagenum_t next_free_page_num = getNumOfPages(&header);
         setFreePageOffset(&header, OFFSET(next_free_page_num));
@@ -182,7 +227,7 @@ void file_free_page(pagenum_t pagenum) {
     file_read_page(HEADER_PAGE_NUM, &header);
 
     // Clear
-    CLEAR(buf);
+    CLEAR(&buf);
 
     // Add it into the free page list
     setNextFreePageOffset(&buf, getNextFreePageOffset(&header));
@@ -197,23 +242,16 @@ void file_free_page(pagenum_t pagenum) {
  *  Read an on-disk page into the in-memory page structure(dest)
  */
 void file_read_page(pagenum_t pagenum, page_t* dest) {
-    SEEK(OFFSET(pagenum));
-    READ(*dest);
+    if(dest == NULL)
+        return;
+    buffered_read_page(fd, pagenum, dest);
 }
 
 /*
  *  Write an in-memory page(src) to the on-disk page
  */
 void file_write_page(pagenum_t pagenum, const page_t* src) {
-    SEEK(OFFSET(pagenum));
-    WRITE(*src);
-}
-
-/*
- *  Flush and Sync the buffer and exit.
- */
-void when_exit(void) {
-    fsync(fd);
-    if (fd != 0)
-        close(fd);
+    if(src == NULL)
+        return;
+    buffered_write_page(fd, pagenum, dest);
 }

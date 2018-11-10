@@ -14,6 +14,7 @@
 
 // Default size of free pages
 #define DEFAULT_SIZE_OF_FREE_PAGES 10
+#define DEFAULT_SIZE_OF_TABLES     10
 
 /* Error Code */
 #define SUCCESS            0
@@ -21,7 +22,7 @@
 #define INVALID_INDEX     -2
 #define INVALID_KEY       -3
 #define INVALID_PAGE      -4
-#define INVALID_FD        -5
+#define FULL_FD           -5
 #define INVALID_FILENAME  -6
 #define READ_ERROR        -7
 #define WRITE_ERROR       -8

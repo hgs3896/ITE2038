@@ -88,4 +88,21 @@ union page_t
     node_page_t node_page;
 };
 
+typedef struct buffer_frame_t{
+    /* • Physical frame: containing up to date contents of target page. */
+    page_t frame;
+    /* • Table id: the unique id of table (per file) */
+    int table_id;
+    /* • Page number: the target page number within a file. */
+    pagenum_t pgnum;
+    /* • Is dirty: whether this buffer block is dirty or not. */
+    bool dirty;
+    /* • Is pinned: whether this buffer is accessed right now. */
+    int pin_cnt;
+    /* • LRU list next (prev) : buffer blocks are managed by LRU list. */
+    struct buffer_frame_t next;
+    /* • Other information can be added with your own buffer manager design. */
+    // Empty
+};
+
 #endif

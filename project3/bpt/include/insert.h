@@ -1,9 +1,7 @@
 #ifndef __INSERT_H__
 #define __INSERT_H__
 
-#include "utils.h"
-#include "file_manager.h"
-#include "page_access_manager.h"
+#include "types.h"
 
 // Insertion
 

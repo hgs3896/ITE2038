@@ -1,5 +1,9 @@
 #include "delete.h"
 
+#include "utils.h"
+#include "file_manager.h"
+#include "page_access_manager.h"
+
 #include <stdlib.h>
 
 // Deletion

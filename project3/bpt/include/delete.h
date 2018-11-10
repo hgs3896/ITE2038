@@ -1,9 +1,7 @@
 #ifndef __DELETE_H__
 #define __DELETE_H__
 
-#include "utils.h"
-#include "file_manager.h"
-#include "page_access_manager.h"
+#include "types.h"
 
 // Deletion
 offset_t delete_record( offset_t root, keynum_t key );

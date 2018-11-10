@@ -3,19 +3,20 @@
 
 #include "types.h"
 
+#include <string.h> /* memset */
 #include <stdlib.h> /* malloc, free, atexit */
 #include <fcntl.h> /* file control */
 #include <sys/stat.h> /* system constants */
 #include <unistd.h> /* open, close, lseek */
-#include <string.h> /* memset */
 
 // MACROs for convinience
-#define READ(buf) (read(fd, &(buf), PAGESIZE))
-#define WRITE(buf) (write(fd, &(buf), PAGESIZE))
-#define PAGE_ALLOC() (malloc(PAGE_SIZE))
-#define PAGE_FREE(buf_addr) (free(buf_addr))
-#define CLEAR(buf) (memset(&(buf), 0, PAGESIZE))
-#define SEEK(offset) (lseek(fd, (offset), SEEK_SET) >= 0)
+#define READ(fd, buf) (read((fd), (buf), PAGESIZE))
+#define WRITE(fd, buf) (write((fd), (buf), PAGESIZE))
+#define COPY(dest, src) (memcpy((dest), (src), PAGESIZE))
+#define CLEAR(buf) (memset((buf), 0, PAGESIZE))
+#define SEEK(fd, offset) (lseek((fd), (offset), SEEK_SET) >= 0)
+// #define PAGE_ALLOC() (malloc(PAGE_SIZE))
+// #define PAGE_FREE(buf_addr) (free(buf_addr))
 #define OFFSET(pagenum) ((pagenum) * PAGESIZE)
 #define PGNUM(pageoffset) ((pageoffset) / PAGESIZE)
 
@@ -102,6 +103,5 @@ void file_write_page(pagenum_t pagenum, const page_t* src);
 /*
  *  Flush and Sync the buffer and exit.
  */
-void when_exit(void);
 
 #endif
