@@ -1,4 +1,6 @@
-#include "insert.h"
+#include "index_manager.h"
+#include "file_manager.h"
+#include "page_access_manager.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -6,18 +8,18 @@
 /*
  * Make an intenal page and return its offset.
  */
-offset_t make_internal( void ) {
+offset_t make_internal( int table_id ) {
     page_t buf;
 
     // Allocate one page from the free page list.
-    offset_t new_page_offset = file_alloc_page();
+    offset_t new_page_offset = file_alloc_page(table_id);
 
-    file_read_page(PGNUM(new_page_offset), &buf);
+    file_read_page(table_id, PGNUM(new_page_offset), &buf);
 
     CLEAR(buf);
     setInternal(&buf);
 
-    file_write_page(PGNUM(new_page_offset), &buf);
+    file_write_page(table_id, PGNUM(new_page_offset), &buf);
 
     return new_page_offset;
 }
@@ -25,18 +27,18 @@ offset_t make_internal( void ) {
 /*
  * Make a leaf page and return its offset.
  */
-offset_t make_leaf( void ) {
+offset_t make_leaf( int table_id ) {
     page_t buf;
 
     // Allocate one page from the free page list.
-    offset_t new_page_offset = file_alloc_page();
+    offset_t new_page_offset = file_alloc_page(table_id);
 
-    file_read_page(PGNUM(new_page_offset), &buf);
+    file_read_page(table_id, PGNUM(new_page_offset), &buf);
 
     CLEAR(buf);
     setLeaf(&buf);
 
-    file_write_page(PGNUM(new_page_offset), &buf);
+    file_write_page(table_id, PGNUM(new_page_offset), &buf);
 
     return new_page_offset;
 }
@@ -44,10 +46,10 @@ offset_t make_leaf( void ) {
 /*
  * Get the index of a left page in terms of a parent page.
  */
-int get_left_index( offset_t parent_offset, offset_t left_offset ) {
+int get_left_index( int table_id, offset_t parent_offset, offset_t left_offset ) {
     page_t parent;
 
-    file_read_page(PGNUM(parent_offset), &parent);
+    file_read_page(table_id, PGNUM(parent_offset), &parent);
 
     int num_keys = getNumOfKeys(&parent);
     int left_index = 0;
@@ -60,12 +62,12 @@ int get_left_index( offset_t parent_offset, offset_t left_offset ) {
 /*
  * Insert a record into a leaf page which has a room to save a record.
  */
-offset_t insert_into_leaf( offset_t leaf, const record_t * record ) {
+offset_t insert_into_leaf( int table_id, offset_t leaf, const record_t * record ) {
     char buf_value[120];
     int i, insertion_point, num_keys;
     page_t buf;
 
-    file_read_page(PGNUM(leaf), &buf);
+    file_read_page(table_id, PGNUM(leaf), &buf);
 
     /* Load the metatdata. */
     num_keys = getNumOfKeys(&buf);
@@ -94,7 +96,7 @@ offset_t insert_into_leaf( offset_t leaf, const record_t * record ) {
     /* Set Metadata */
     setNumOfKeys(&buf, getNumOfKeys(&buf) + 1);
 
-    file_write_page(PGNUM(leaf), &buf);
+    file_write_page(table_id, PGNUM(leaf), &buf);
     return leaf;
 }
 
@@ -102,17 +104,17 @@ offset_t insert_into_leaf( offset_t leaf, const record_t * record ) {
  * Insert a record into a leaf page which has no room to save more records.
  * Therefore, first split the leaf page and call insert_into_parent() for pushing up the key.
  */
-offset_t insert_into_leaf_after_splitting( offset_t root_offset, offset_t leaf_offset, const record_t * record) {
+offset_t insert_into_leaf_after_splitting( int table_id, offset_t root_offset, offset_t leaf_offset, const record_t * record) {
     page_t leaf, new_leaf;
     offset_t new_leaf_offset;
     keynum_t temp_keys[DEFAULT_LEAF_ORDER];
     char temp_values[DEFAULT_LEAF_ORDER][120];
     int insertion_index, split, new_key, i, j, num_keys;
 
-    new_leaf_offset = make_leaf();
+    new_leaf_offset = make_leaf(table_id);
 
-    file_read_page(PGNUM(leaf_offset), &leaf);
-    file_read_page(PGNUM(new_leaf_offset), &new_leaf);
+    file_read_page(table_id, PGNUM(leaf_offset), &leaf);
+    file_read_page(table_id, PGNUM(new_leaf_offset), &new_leaf);
 
     /* Find the Insertion Point */
     if (record->key < getKey(&leaf, 0))
@@ -167,29 +169,29 @@ offset_t insert_into_leaf_after_splitting( offset_t root_offset, offset_t leaf_o
     /* Take the first element of new leaf as a push-up key. */
     new_key = getKey(&new_leaf, 0);
 
-    file_write_page(PGNUM(leaf_offset), &leaf);
-    file_write_page(PGNUM(new_leaf_offset), &new_leaf);
+    file_write_page(table_id, PGNUM(leaf_offset), &leaf);
+    file_write_page(table_id, PGNUM(new_leaf_offset), &new_leaf);
 
-    return insert_into_parent(root_offset, leaf_offset, new_key, new_leaf_offset);
+    return insert_into_parent(table_id, root_offset, leaf_offset, new_key, new_leaf_offset);
 }
 
 /*
  * Insert a key into an internal page to save a record.
  * To save the key, it has to determine whether to split and whether to push a key.
  */
-offset_t insert_into_parent( offset_t root_offset, offset_t left_offset, uint64_t key, offset_t right_offset ) {
+offset_t insert_into_parent( int table_id, offset_t root_offset, offset_t left_offset, uint64_t key, offset_t right_offset ) {
     int left_index = 0, num_keys;
     offset_t parent_offset;
     page_t left, parent;
 
-    file_read_page(PGNUM(left_offset), &left);
+    file_read_page(table_id, PGNUM(left_offset), &left);
 
     parent_offset = getParentOffset(&left);
 
     /* Case: new root. */
 
     if (parent_offset == HEADER_PAGE_OFFSET)
-        return insert_into_new_root(left_offset, key, right_offset);
+        return insert_into_new_root(table_id, left_offset, key, right_offset);
 
     /* Case: leaf or node. (Remainder of function body.)
      */
@@ -197,28 +199,28 @@ offset_t insert_into_parent( offset_t root_offset, offset_t left_offset, uint64_
     /* Find the parent's pointer to the left node.
      */
 
-    left_index = get_left_index(parent_offset, left_offset);
+    left_index = get_left_index(table_id, parent_offset, left_offset);
 
     /* Simple case: the new key fits into the node.
      */
 
-    file_read_page(PGNUM(parent_offset), &parent);
+    file_read_page(table_id, PGNUM(parent_offset), &parent);
     num_keys = getNumOfKeys(&parent);
     if (num_keys < DEFAULT_INTERNAL_ORDER - 1)
-        return insert_into_node(root_offset, parent_offset, left_index, key, right_offset);
+        return insert_into_node(table_id, root_offset, parent_offset, left_index, key, right_offset);
 
     /* Harder case:  split a node in order to preserve the B+ tree properties.
      */
 
-    return insert_into_node_after_splitting(root_offset, parent_offset, left_index, key, right_offset);
+    return insert_into_node_after_splitting(table_id, root_offset, parent_offset, left_index, key, right_offset);
 }
 
 /*
  * Insert a key into a internal page which has a room to save a key.
  */
-offset_t insert_into_node( offset_t root_offset, offset_t parent_offset, int left_index, uint64_t key, offset_t right_offset) {
+offset_t insert_into_node( int table_id, offset_t root_offset, offset_t parent_offset, int left_index, uint64_t key, offset_t right_offset) {
     page_t parent;
-    file_read_page(PGNUM(parent_offset), &parent);
+    file_read_page(table_id, PGNUM(parent_offset), &parent);
 
     int i, num_keys = getNumOfKeys(&parent);
 
@@ -230,7 +232,7 @@ offset_t insert_into_node( offset_t root_offset, offset_t parent_offset, int lef
     setKey(&parent, left_index, key);
     setNumOfKeys(&parent, getNumOfKeys(&parent) + 1);
 
-    file_write_page(PGNUM(parent_offset), &parent);
+    file_write_page(table_id, PGNUM(parent_offset), &parent);
     return root_offset;
 }
 
@@ -238,7 +240,7 @@ offset_t insert_into_node( offset_t root_offset, offset_t parent_offset, int lef
  * Insert a key into a internal page which has no room to save more keys.
  * Therefore, first split the internal page and call insert_into_parent() for pushing up the key recursively.
  */
-offset_t insert_into_node_after_splitting( offset_t root_offset, offset_t parent_offset, int left_index, uint64_t key, offset_t right_offset) {
+offset_t insert_into_node_after_splitting( int table_id, offset_t root_offset, offset_t parent_offset, int left_index, uint64_t key, offset_t right_offset) {
     int i, j, split, num_keys;
     offset_t new_node_offset, child_offset;
     keynum_t temp_keys[DEFAULT_INTERNAL_ORDER], pushup_key;
@@ -254,7 +256,7 @@ offset_t insert_into_node_after_splitting( offset_t root_offset, offset_t parent
      */
     page_t parent, new_node, child;
 
-    file_read_page(PGNUM(parent_offset), &parent);
+    file_read_page(table_id, PGNUM(parent_offset), &parent);
     num_keys = getNumOfKeys(&parent);
 
     for (i = 0, j = 0; i < num_keys + 1; i++, j++) {
@@ -272,8 +274,8 @@ offset_t insert_into_node_after_splitting( offset_t root_offset, offset_t parent
 
     /* Create the new node and copy half the keys and pointers to the old and half to the new. */
     split = cut(DEFAULT_INTERNAL_ORDER);
-    new_node_offset = make_internal();
-    file_read_page(PGNUM(new_node_offset), &new_node);
+    new_node_offset = make_internal(table_id);
+    file_read_page(table_id, PGNUM(new_node_offset), &new_node);
 
     /* Left internal node */
     for (i = 0, num_keys = 0; i < split - 1; i++) {
@@ -298,31 +300,31 @@ offset_t insert_into_node_after_splitting( offset_t root_offset, offset_t parent
     for (i = 0, num_keys = getNumOfKeys(&new_node); i <= num_keys; i++) {
         child_offset = getOffset(&new_node, i);
         /* Set the parent offset of child nodes new_node_offset. */
-        file_read_page(PGNUM(child_offset), &child);
+        file_read_page(table_id, PGNUM(child_offset), &child);
         setParentOffset(&child, new_node_offset);
-        file_write_page(PGNUM(child_offset), &child);
+        file_write_page(table_id, PGNUM(child_offset), &child);
     }
 
-    file_write_page(PGNUM(new_node_offset), &new_node);
-    file_write_page(PGNUM(parent_offset), &parent);
+    file_write_page(table_id, PGNUM(new_node_offset), &new_node);
+    file_write_page(table_id, PGNUM(parent_offset), &parent);
 
     /* Insert a new key into the parent of the two
      * nodes resulting from the split, with
      * the old node to the left and the new to the right.
      */
 
-    return insert_into_parent(root_offset, parent_offset, pushup_key, new_node_offset);
+    return insert_into_parent(table_id, root_offset, parent_offset, pushup_key, new_node_offset);
 }
 
 /*
  * Make a new root page for insertion of the pushup key and insert it into the root page.
  */
-offset_t insert_into_new_root( offset_t left_offset, uint64_t key, offset_t right_offset ) {
+offset_t insert_into_new_root( int table_id, offset_t left_offset, uint64_t key, offset_t right_offset ) {
     page_t root, left, right;
     offset_t root_offset = make_internal();
-    file_read_page(PGNUM(root_offset), &root);
-    file_read_page(PGNUM(left_offset), &left);
-    file_read_page(PGNUM(right_offset), &right);
+    file_read_page(table_id, PGNUM(root_offset), &root);
+    file_read_page(table_id, PGNUM(left_offset), &left);
+    file_read_page(table_id, PGNUM(right_offset), &right);
 
     setKey(&root, 0, key);
     setOffset(&root, 0, left_offset);
@@ -332,9 +334,9 @@ offset_t insert_into_new_root( offset_t left_offset, uint64_t key, offset_t righ
     setParentOffset(&left, root_offset);
     setParentOffset(&right, root_offset);
 
-    file_write_page(PGNUM(root_offset), &root);
-    file_write_page(PGNUM(left_offset), &left);
-    file_write_page(PGNUM(right_offset), &right);
+    file_write_page(table_id, PGNUM(root_offset), &root);
+    file_write_page(table_id, PGNUM(left_offset), &left);
+    file_write_page(table_id, PGNUM(right_offset), &right);
 
     return root_offset;
 }
@@ -342,17 +344,17 @@ offset_t insert_into_new_root( offset_t left_offset, uint64_t key, offset_t righ
 /*
  * If there is no tree, make a new tree.
  */
-offset_t start_new_tree( const record_t* record ) {
-    offset_t root = make_leaf();
+offset_t start_new_tree( int table_id, const record_t* record ) {
+    offset_t root = make_leaf(table_id);
     page_t buf;
 
-    file_read_page(PGNUM(root), &buf);
+    file_read_page(table_id, PGNUM(root), &buf);
 
     setKey(&buf, 0, record->key);
     setValue(&buf, 0, record->value);
     setNumOfKeys(&buf, 1);
 
-    file_write_page(PGNUM(root), &buf);
+    file_write_page(table_id, PGNUM(root), &buf);
 
     return root;
 }
@@ -364,7 +366,7 @@ offset_t start_new_tree( const record_t* record ) {
 * properties.
 */
 
-offset_t insert_record( offset_t root, const record_t * record ) {
+offset_t insert_record( int table_id, offset_t root, const record_t * record ) {
     record_t * pointer;
     page_t buf;
 
@@ -372,7 +374,7 @@ offset_t insert_record( offset_t root, const record_t * record ) {
      */
 
     // Duplicated
-    if ((pointer = find_record(root, record->key)) != NULL) {
+    if ((pointer = find_record(table_id, root, record->key)) != NULL) {
         free(pointer);
         return root;
     }
@@ -382,14 +384,14 @@ offset_t insert_record( offset_t root, const record_t * record ) {
      */
 
     if (root == HEADER_PAGE_OFFSET)
-        return start_new_tree(record);
+        return start_new_tree(table_id, record);
 
-    offset_t leaf = find_leaf(root, record->key);
+    offset_t leaf = find_leaf(table_id, root, record->key);
 
     if(leaf == HEADER_PAGE_OFFSET)
         return root;
     
-    file_read_page(PGNUM(leaf), &buf);
+    file_read_page(table_id, PGNUM(leaf), &buf);
 
     /* Case: the tree already exists.
      * (Rest of function body.)
@@ -399,12 +401,12 @@ offset_t insert_record( offset_t root, const record_t * record ) {
      */
 
     if (getNumOfKeys(&buf) < DEFAULT_LEAF_ORDER - 1) {
-        leaf = insert_into_leaf(leaf, record);
+        leaf = insert_into_leaf(table_id, leaf, record);
         return root;
     }
 
     /* Case:  leaf must be split.
      */
 
-    return insert_into_leaf_after_splitting(root, leaf, record);
+    return insert_into_leaf_after_splitting(table_id, root, leaf, record);
 }

@@ -2,8 +2,7 @@
 
 #include "page_access_manager.h"
 #include "buffer_manager.h"
-#include "insert.h"
-#include "delete.h"
+#include "index_manager.h"
 
 #include <stdio.h>
 
@@ -11,11 +10,11 @@
  * For automatic DB shutdown
  */
 static bool initialized = false;
+
 /*
  * File Descriptor for R/W
  */
 static int fds[DEFAULT_SIZE_OF_TABLES];
-int fd;
 
 /*
  * Initialize buffer pool with given number and buffer manager.
@@ -72,7 +71,7 @@ int open_table (char * pathname){
     }
 
     /* unique table id */
-    return fd = idx;
+    return idx + 1;
 }
 
 /*
@@ -83,14 +82,14 @@ int open_table (char * pathname){
 int close_table(int table_id){
     // writes out the pages only from those relating to given table_id
     // writes out all dirty buffer block to disk.
-    if(table_id >= 0 && table_id < DEFAULT_SIZE_OF_TABLES && fds[table_id] != 0){
+    if(table_id >= 1 && table_id <= DEFAULT_SIZE_OF_TABLES && fds[table_id] != 0){
         // table_id에 해당하는 버퍼에 남은 dirty한 버퍼를 다 flush!
         flush_buf(table_id);
 
         // fsync(fds[table_id]);
 
-        close(fds[table_id]);
-        fds[table_id] = 0;
+        close(fds[table_id-1]);
+        fds[table_id-1] = 0;
         return 0;
     }
     return -1;
@@ -104,7 +103,7 @@ int close_table(int table_id){
 int shutdown_db(void){
     // writes out all dirty buffer block to disk.
     int i;
-    for(i=0;i<DEFAULT_SIZE_OF_TABLES;++i)
+    for(i=1;i<=DEFAULT_SIZE_OF_TABLES;++i)
         close_table(i);
 }
 
@@ -116,9 +115,9 @@ int shutdown_db(void){
 char * find (int table_id, keynum_t key) {
     record_t* record;
 
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
-    if ((record = find_record(getRootPageOffset(&header), key)) == NULL)
+    if ((record = find_record(table_id, getRootPageOffset(&header), key)) == NULL)
         return NULL;
 
     char * ret = malloc(120);
@@ -138,15 +137,15 @@ int insert (int table_id, keynum_t key, char * value) {
     record.key = key;
     strncpy(record.value, value, 120);
 
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
     // Insert the record
-    offset_t root_offset = insert_record(getRootPageOffset(&header), &record);
+    offset_t root_offset = insert_record(table_id, getRootPageOffset(&header), &record);
 
     // Update the root offset
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
     setRootPageOffset(&header, root_offset);
-    file_write_page(HEADER_PAGE_NUM, &header);
+    file_write_page(table_id, HEADER_PAGE_NUM, &header);
 
     return root_offset == KEY_EXIST;
 }
@@ -156,19 +155,19 @@ int insert (int table_id, keynum_t key, char * value) {
  *  If success, return 0. Otherwise, return non-zero value.
  */
 int delete(int table_id, keynum_t key){
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
     // Insert the record
-    offset_t root_offset = delete_record( getRootPageOffset(&header), key );
+    offset_t root_offset = delete_record(table_id, getRootPageOffset(&header), key );
 
     if(root_offset != KEY_EXIST){
         // Update the root offset
-        file_read_page(HEADER_PAGE_NUM, &header);
+        file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
         // Reset the Root Page Offset.
         setRootPageOffset(&header, root_offset);
 
-        file_write_page(HEADER_PAGE_NUM, &header);
+        file_write_page(table_id, HEADER_PAGE_NUM, &header);
         return SUCCESS;
     }
     return -1;    
@@ -177,7 +176,7 @@ int delete(int table_id, keynum_t key){
 /*
  *  Allocate an on-disk page from the free page list
  */
-pagenum_t file_alloc_page() {
+pagenum_t file_alloc_page(int table_id) {
 
     /*
      * Only if a file doesn't have enough free pages,
@@ -186,7 +185,7 @@ pagenum_t file_alloc_page() {
      */
 
     /* Update the cached header page. */
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
     page_t buf;
 
@@ -197,21 +196,21 @@ pagenum_t file_alloc_page() {
         setFreePageOffset(&header, OFFSET(next_free_page_num));
         for (i = 1; i <= DEFAULT_SIZE_OF_FREE_PAGES; ++i, ++next_free_page_num) {
             setNextFreePageOffset(&buf, i != DEFAULT_SIZE_OF_FREE_PAGES ? OFFSET(next_free_page_num + 1) : HEADER_PAGE_OFFSET);
-            file_write_page(next_free_page_num, &buf);
+            file_write_page(table_id, next_free_page_num, &buf);
         }
         // Set Number of Pages
         setNumOfPages(&header, getNumOfPages(&header) + DEFAULT_SIZE_OF_FREE_PAGES);
         // Sync the cached header page with the file.
-        file_write_page(HEADER_PAGE_NUM, &header);
+        file_write_page(table_id, HEADER_PAGE_NUM, &header);
     }
     // Get a free page offset from header page.
     offset_t free_page_offset = getFreePageOffset(&header);
     // Read the free page.
-    file_read_page(PGNUM(free_page_offset), &buf);
+    file_read_page(table_id, PGNUM(free_page_offset), &buf);
     // Get a next free page offset from the free page.
     setFreePageOffset(&header, getNextFreePageOffset(&buf));
     // Wrtie the header page and sync the cached header page with the file.
-    file_write_page(HEADER_PAGE_NUM, &header);
+    file_write_page(table_id, HEADER_PAGE_NUM, &header);
 
     return free_page_offset;
 }
@@ -219,12 +218,12 @@ pagenum_t file_alloc_page() {
 /*
  *  Free an on-disk page to the free page list
  */
-void file_free_page(pagenum_t pagenum) {
+void file_free_page(int table_id, pagenum_t pagenum) {
     page_t buf;
 
     // Read the given page and header page.
-    file_read_page(pagenum, &buf);
-    file_read_page(HEADER_PAGE_NUM, &header);
+    file_read_page(table_id, pagenum, &buf);
+    file_read_page(table_id, HEADER_PAGE_NUM, &header);
 
     // Clear
     CLEAR(&buf);
@@ -234,24 +233,28 @@ void file_free_page(pagenum_t pagenum) {
     setNextFreePageOffset(&header, OFFSET(pagenum));
 
     // Apply changes to the header page.
-    file_write_page(HEADER_PAGE_NUM, &header);
-    file_write_page(pagenum, &buf);
+    file_write_page(table_id, HEADER_PAGE_NUM, &header);
+    file_write_page(table_id, pagenum, &buf);
 }
 
 /*
  *  Read an on-disk page into the in-memory page structure(dest)
  */
-void file_read_page(pagenum_t pagenum, page_t* dest) {
+void file_read_page(int table_id, pagenum_t pagenum, page_t* dest) {
     if(dest == NULL)
         return;
-    buffered_read_page(fd, pagenum, dest);
+    if(table_id < 0 || table_id >= DEFAULT_SIZE_OF_TABLES || fds[table_id] == 0)
+        return;
+    buffered_read_page(table_id, pagenum, dest);
 }
 
 /*
  *  Write an in-memory page(src) to the on-disk page
  */
-void file_write_page(pagenum_t pagenum, const page_t* src) {
+void file_write_page(int table_id, pagenum_t pagenum, const page_t* src) {
     if(src == NULL)
+        return;
+    if(table_id < 0 || table_id >= DEFAULT_SIZE_OF_TABLES || fds[table_id] == 0)
         return;
     buffered_write_page(fd, pagenum, dest);
 }

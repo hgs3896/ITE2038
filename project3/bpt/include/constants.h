@@ -41,4 +41,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
+#define OFFSET(pagenum) ((pagenum) * PAGESIZE)
+#define PGNUM(pageoffset) ((pageoffset) / PAGESIZE)
+
 #endif

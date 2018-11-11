@@ -5,6 +5,39 @@
 #include <assert.h>
 #include <string.h>
 
+int binarySearch(const page_t *page, uint64_t key) {
+    int l = 0, r = getNumOfKeys(page) - 1, m, middle_key;
+    while (l <= r) {
+        m = (l + r) / 2;
+        middle_key = getKey(page, m);
+        if (middle_key < key)
+            l = m + 1;
+        else if (middle_key > key)
+            r = m - 1;
+        else
+            return m;
+    }
+    return INVALID_KEY; /* cannot find the given key in the page */
+}
+
+int binaryRangeSearch(const page_t *page, uint64_t key) {
+    /* Modified Version of Binary Search */
+    int l = 0, r = getNumOfKeys(page), m, middle_key;
+    while (l < r) {
+        m = (l + r) / 2;
+
+        if ( l == m )
+            return m;
+
+        middle_key = getKey(page, m);
+        if (middle_key <= key)
+            l = m;
+        else
+            r = m;
+    }
+    return INVALID_KEY; /* No Key is provided. */
+}
+
 // Getters and Setters
 
 // for Header Page

@@ -38,4 +38,9 @@ int setKey(page_t *page, uint32_t index, keynum_t key);
 int setOffset(page_t *page, uint32_t index, offset_t offset);
 int setValue(page_t *page, uint32_t index, const char *src);
 
+// for key search in a node page.
+
+int binarySearch( const page_t *page, keynum_t key );
+int binaryRangeSearch( const page_t *page, keynum_t key );
+
 #endif

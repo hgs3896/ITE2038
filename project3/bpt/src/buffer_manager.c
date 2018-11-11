@@ -1,24 +1,45 @@
-#include "file_manager.h"
-#include <stdlib.h>
+#include "buffer_manager.h"
+
+#include <string.h> /* memset */
+#include <stdlib.h> /* malloc, free, atexit */
+#include <fcntl.h> /* file control */
+#include <sys/stat.h> /* system constants */
+#include <unistd.h> /* open, close, lseek */
+
+// MACROs for convinience
+#define READ(tid, buf) (read(fds[(tid)-1], (buf), PAGESIZE))
+#define WRITE(tid, buf) (write(fds[(tid)-1], (buf), PAGESIZE))
+#define COPY(dest, src) (memcpy((dest), (src), PAGESIZE))
+#define CLEAR(buf) (memset((buf), 0, PAGESIZE))
+#define SEEK(tid, offset) (lseek(fds[(tid)-1], (offset), SEEK_SET) >= 0)
+
+#define FRAME_ALLOC() (malloc(sizeof(buffer_frame_t)))
+#define FRAME_FREE(buf_addr) (free(buf_addr))
+
+#define IS_VALID_TID(tid) ((tid) >= 1 && (tid) <= DEFAULT_SIZE_OF_TABLES && fds[(tid)-1] != 0)
 
 static bool initialized = false;
 static buffer_frame_t* pool = NULL;
 
 /*
- * Initialize the buffer pool.by allocating the buffer pool (array) with the given number of entries.
- * Initialize other fields (state info, LRU info..) with your own design.
- * If success, return 0. Otherwise, return non-zero value.
+ *  Initialize the buffer pool with the given number.
+ *  
+ *  - Initialize other fields (state info, LRU info..) with your own design.
+ *  - If success, return 0.
+ *  - Otherwise, return non-zero value.
  */
-int init_buf(int buf_num){
-	free_buf();
+int buf_init(int buf_num){
+	// Initialize the previous buffer pool.
+	buf_free();
+
 	buffer_frame_t* temp, *front = NULL;
 	
 	if(buf_num < 0)
 		return -1;
 
-	// Form a doubly linked list.
+	// Form a circular, doubly-linked list.
 	while(buf_num--){
-		temp = malloc(sizeof(buffer_frame_t));
+		temp = FRAME_ALLOC();
 		if(temp == NULL){
 			// Not Enough Memory
 			exit(-1);
@@ -50,13 +71,13 @@ int init_buf(int buf_num){
 }
 
 /*
- *  Read an on-disk page into the in-memory page structure(dest)
+ *  Get the buffer control block from the buffer pool.
  */
-void buffered_read_page(int table_id, pagenum_t pagenum, page_t* dest) {
-	buffer_frame_t* p;
-
+buffer_frame_t* dest buf_get_frame(int table_id, pagenum_t pagenum){
 	if(!initialized)
 		return;
+
+	buffer_frame_t* p;
 
 	p = pool->next;
 	
@@ -68,18 +89,7 @@ void buffered_read_page(int table_id, pagenum_t pagenum, page_t* dest) {
 		if(p->table_id == table_id && p->pgnum == pagenum){
 			/* Pinned */
 			++p->pin_cnt;
-
-			/* Copy the content of a requested frame. */
-			COPY(dest, p->frame);
-
-			/* Put it at the front of the list. */
-			p->prev->next = p->next;
-			p->next->prev = p->prev;
-			p->prev = pool;
-			p->next = pool->next;
-			p->prev->next = p;
-			p->next->prev = p;
-			return;
+			return p;
 		}
 		
 		if(p == pool)
@@ -90,11 +100,13 @@ void buffered_read_page(int table_id, pagenum_t pagenum, page_t* dest) {
 	}
 
 	/* Find an unpinned frame that can be used for replacement */
-	do{
-		if(!p->pin_cnt)
+	while(p != NULL){
+		if(p->pin_cnt == 0)
 			break;
 		p = p->prev;
-	}while(p != pool);
+		if(p==pool)
+			return NULL; // No frame can be evicted.
+	}
 
 	/* Pinned */
 	++p->pin_cnt;
@@ -102,119 +114,65 @@ void buffered_read_page(int table_id, pagenum_t pagenum, page_t* dest) {
 	// If the page is dirty,
 	if(p->dirty){
 		// Flush it and make it clean
-		SEEK(p->table_id, OFFSET(p->pgnum));
-    	WRITE(p->table_id, p->frame);
+		file_write_page(p->table_id, p->pgnum, p->frame);
 		p->dirty = false;
 	}
 
 	// Replace this page
+
+	// Refill the page metadata
 	p->table_id = table_id;
 	p->pgnum = pagenum;
 
 	// Read the page
-	SEEK(p->table_id, OFFSET(pagenum));
-	READ(p->table_id, p->frame);
-	COPY(dest, p->frame);
+	file_read_page(p->table_id, p->pgnum, p->frame);
 
-	// Insert into the front
+	return p;
+}
+
+/*
+ *  Put the buffer block back to the buffer pool.
+ */
+void buf_put_frame(buffer_frame_t* src) {
+	// If the buffer pool is not initialized,
+	if(!initialized)
+		return; // return.
+
+	buffer_frame_t* p = pool;
+
+	while(true){
+		p = p->next;
+		if(p == src)
+			break;
+		if(p == pool)
+			return;
+	}
+
+	/* Put it at the front of the list. */
 	p->prev->next = p->next;
 	p->next->prev = p->prev;
 	p->prev = pool;
 	p->next = pool->next;
 	p->prev->next = p;
 	p->next->prev = p;
-}
-
-/*
- *  Write an in-memory page(src) to the on-disk page
- */
-void buffered_write_page(int table_id, pagenum_t pagenum, const page_t* src) {
-	buffer_frame_t* p, *prev;
-
-	if(!initialized)
-		return;
-
-	p = prev = buffers;
-
-	while(p != NULL){
-		/* 
-		 * If there exists the requested page on the buffer, 
-		 * use it.
-		 */
-		if(p->table_id == table_id && p->pgnum == pagenum){
-			/* Wait until the page gets unpinned. */
-			while(p->pin_cnt);
-
-			/* Pinned */
-			++p->pin_cnt;
-
-			/* Copy the content of a requested frame. */
-			COPY(p->frame, src);
-			p->dirty = true;
-
-			/* Put it at the front of the list. */
-			if(prev != p){
-				prev->next = p->next;
-				p->next = buffer;
-				buffer = p;
-			}
-
-			/* Unpinned */
-			--p->pin_cnt;
-
-			return;			
-		}
-		/* Save the previous node. */
-		prev = p;
-		/* go to next page */
-		p = p->next;
-	}
-
-	/* Otherwise, no matching page exists. */
-	p = prev;
-
-	/* Wait until the least-frequently used page gets unpinned. */
-	while(p->pin_cnt);
-
-	/* Pinned */
-	++p->pin_cnt;
-
-	// If the page is dirty,
-	if(p->dirty){
-		// Flush it and make it clean
-		SEEK(p->table_id, OFFSET(p->pgnum));
-    	WRITE(p->table_id, p->frame);
-		p->dirty = false;
-	}
-
-	// Replace this page
-	p->table_id = table_id;
-	p->pgnum = pagenum;
-
-	// Write the page
-	SEEK(p->table_id, OFFSET(p->pgnum));
-    WRITE(p->table_id, p->frame);
-	COPY(dest, p->frame);
-
-	// Insert into the front
-	p->next = buffer;
-	buffer = p;
 
 	/* Unpinned */
 	--p->pin_cnt;
 }
 
-void finish_read_page(int table_id, pagenum_t pagenum){
-
-}
-
-void flush_buf (int table_id){
-	if(table_id >= 0 && table_id < DEFAULT_SIZE_OF_TABLES && fds[table_id] != 0){
+/*
+ *  Flush and Sync the buffer and exit.
+ */
+void buf_flush (int table_id){
+	if(IS_TABLE){
 
 	}
 }
 
-int free_buf(void){
+/*
+ *  Free an buffer block and link it to the free page list.
+ */
+int buf_free(void){
 	if(pool){
 		buffer_frame_t* it, *next;
 		
@@ -222,11 +180,31 @@ int free_buf(void){
 		next = it->next;
 
 		while(next != pool){
-			free(it);
+			FRAME_FREE(it);
 			it = next;
 			next = it->next;
 		}
 
 		pool = NULL;
+	}
+}
+
+/*
+ *  Read an on-disk page into the in-memory page structure(dest)
+ */
+void file_read_page(int table_id, pagenum_t pagenum, page_t* dest){
+	if(IS_VALID_TID(table_id)){
+		SEEK(table_id, OFFSET(pagenum));
+	    READ(table_id, dest);
+    }
+}
+
+/*
+ *  Write an in-memory page(src) to the on-disk page
+ */
+void file_write_page(int table_id, pagenum_t pagenum, const page_t* src){
+	if(IS_VALID_TID(table_id)){
+		SEEK(table_id, OFFSET(pagenum));
+	    WRITE(table_id, src);
 	}
 }

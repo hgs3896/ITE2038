@@ -2,6 +2,7 @@
 #define __TYPES_H__
 
 #include "constants.h"
+
 // TYPES.
 
 // Type Redefinition
@@ -100,7 +101,7 @@ typedef struct buffer_frame_t{
     /* • Is pinned: whether this buffer is accessed right now. */
     int pin_cnt;
     /* • LRU list next (prev) : buffer blocks are managed by LRU list. */
-    struct buffer_frame_t next;
+    struct buffer_frame_t next, prev;
     /* • Other information can be added with your own buffer manager design. */
     // Empty
 };
