@@ -13,7 +13,7 @@ int main( int argc, char ** argv ) {
     int table2 = open_table("test2.db");
 
     // Buffer Pool initialization
-    init_db(10);
+    init_db(300);
 
 #if !TESTMODE
     printf("> ");

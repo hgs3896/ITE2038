@@ -129,8 +129,8 @@ void file_free_page(int table_id, pagenum_t pagenum) {
     buf_put_frame(buf_header);
 
     // Free it
-    buf_put_frame(buf_free_pg);
     buf_close_frame(buf_free_pg);
+    buf_put_frame(buf_free_pg);
 }
 
 /*

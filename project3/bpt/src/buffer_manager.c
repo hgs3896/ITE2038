@@ -104,18 +104,16 @@ buffer_frame_t* buf_get_frame(int table_id, pagenum_t pagenum) {
 	while(p != NULL){
 		if(p->pin_cnt == 0){
 			// Find a candidate for replacement
-			
-			/* Pinned */
-			++p->pin_cnt;
-
 			break;
 		}
 		p = p->prev;
 		if(p==pool){
-			// No frame can be evicted.
+			// No frames can be evicted.
 			return NULL;
 		}
-	}	
+	}
+
+	// Evict
 
 	// If the page is dirty,
 	buf_flush_frame(p);
@@ -126,6 +124,9 @@ buffer_frame_t* buf_get_frame(int table_id, pagenum_t pagenum) {
 
 	// Read the page
 	file_read_page(p->table_id, p->pgnum, &p->frame);
+
+	/* Pinned */
+	++p->pin_cnt;
 
 	return p;
 }
@@ -185,9 +186,7 @@ void buf_close_frame(buffer_frame_t* frame){
 
 	if(frame == NULL)
 		return;
-
-	while(frame->pin_cnt);
-
+	
 	buf_flush_frame(frame);
 
 	CLEAR(&frame->frame);

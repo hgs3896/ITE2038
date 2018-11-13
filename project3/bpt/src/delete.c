@@ -119,6 +119,7 @@ offset_t adjust_root(int table_id, offset_t root_offset) {
     }
 
     buf_free_frame(buf_root);
+    buf_put_frame(buf_root);
 
     return new_root_offset;
 }
@@ -196,6 +197,7 @@ offset_t coalesce_nodes(int table_id, offset_t root, offset_t node_to_free){
         root = coalesce_nodes(table_id, root, parent_offset);
 
     buf_free_frame(buf_free_pg);
+    buf_put_frame(buf_free_pg);
     return root;
 }
 
