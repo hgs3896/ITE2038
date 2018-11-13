@@ -1,5 +1,7 @@
-#ifndef __FILE_MANAGER_H__
-#define __FILE_MANAGER_H__
+#ifndef __BUFFER_MANAGER_H__
+#define __BUFFER_MANAGER_H__
+
+#define PAGE_PTR(buf) &buf->frame
 
 #include "types.h"
 
@@ -19,23 +21,38 @@ buffer_frame_t* buf_get_frame(int table_id, pagenum_t pagenum);
 void buf_put_frame(buffer_frame_t* src);
 
 /*
- *  Flush and Sync the buffer and exit.
+ *  Get the page and set whether this block gets dirty.
  */
-void buf_flush(int table_id);
+page_t* buf_get_page(buffer_frame_t* frame, bool dirty);
 
 /*
- *  Flush all dirty pages in the buffer pool and free the pool.
+ *  Flush the buffers of the given table and clear them.
  */
-int buf_free(void);
+void buf_close_table(int table_id);
 
 /*
- *  Read an on-disk page into the in-memory page structure(dest)
+ *  Flush the specific buffer and clear it.
  */
-void file_read_page(int table_id, pagenum_t pagenum, page_t* dest);
+void buf_close_frame(buffer_frame_t* frame);
 
 /*
- *  Write an in-memory page(src) to the on-disk page
+ *  Flush the buffers of the given table.
  */
-void file_write_page(int table_id, pagenum_t pagenum, const page_t* src);
+void buf_flush_table(int table_id);
+
+/*
+ *  Flush the specific buffer.
+ */
+void buf_flush_frame(buffer_frame_t* frame);
+
+/*
+ *  Free it from the disk and the buffer.
+ */
+void buf_free_frame(buffer_frame_t* frame);
+
+/*
+ *  Flush all buffers in the buffer pool and free the pool.
+ */
+void buf_shutdown(void);
 
 #endif

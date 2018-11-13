@@ -12,9 +12,12 @@
 // Page size
 #define PAGESIZE 4096
 
-// Default size of free pages
+// Default sizes
 #define DEFAULT_SIZE_OF_FREE_PAGES 10
 #define DEFAULT_SIZE_OF_TABLES     10
+#define DEFAULT_KEY_SIZE           8
+#define DEFAULT_VALUE_SIZE         120
+#define DEFAULT_RECORD_SIZE       (DEFAULT_KEY_SIZE + DEFAULT_VALUE_SIZE)
 
 /* Error Code */
 #define SUCCESS            0
@@ -22,11 +25,13 @@
 #define INVALID_INDEX     -2
 #define INVALID_KEY       -3
 #define INVALID_PAGE      -4
-#define FULL_FD           -5
+#define INVALID_FD        -5
 #define INVALID_FILENAME  -6
-#define READ_ERROR        -7
-#define WRITE_ERROR       -8
-#define SEEK_ERROR        -9
+#define INVALID_TID       -7
+#define FULL_FD           -8
+#define READ_ERROR        -9
+#define WRITE_ERROR       -10
+#define SEEK_ERROR        -11
 
 /* Exception Code */
 #define KEY_EXIST         -100

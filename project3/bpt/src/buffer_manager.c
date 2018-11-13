@@ -1,25 +1,30 @@
 #include "buffer_manager.h"
+#include "disk_manager.h"
+#include "macros.h"
 
-#include <string.h> /* memset */
 #include <stdlib.h> /* malloc, free, atexit */
-#include <fcntl.h> /* file control */
-#include <sys/stat.h> /* system constants */
-#include <unistd.h> /* open, close, lseek */
+#include <string.h> /* memset */
 
 // MACROs for convinience
-#define READ(tid, buf) (read(fds[(tid)-1], (buf), PAGESIZE))
-#define WRITE(tid, buf) (write(fds[(tid)-1], (buf), PAGESIZE))
-#define COPY(dest, src) (memcpy((dest), (src), PAGESIZE))
-#define CLEAR(buf) (memset((buf), 0, PAGESIZE))
-#define SEEK(tid, offset) (lseek(fds[(tid)-1], (offset), SEEK_SET) >= 0)
-
 #define FRAME_ALLOC() (malloc(sizeof(buffer_frame_t)))
 #define FRAME_FREE(buf_addr) (free(buf_addr))
 
-#define IS_VALID_TID(tid) ((tid) >= 1 && (tid) <= DEFAULT_SIZE_OF_TABLES && fds[(tid)-1] != 0)
-
 static bool initialized = false;
 static buffer_frame_t* pool = NULL;
+
+static void putAtFront(buffer_frame_t* p){
+	/* Put it at the front of the list. */
+	if(p == pool){
+		pool = pool->prev;
+	}else{
+		p->prev->next = p->next;
+		p->next->prev = p->prev;
+		p->prev = pool;
+		p->next = pool->next;
+		p->prev->next = p;
+		p->next->prev = p;
+	}
+}
 
 /*
  *  Initialize the buffer pool with the given number.
@@ -29,9 +34,6 @@ static buffer_frame_t* pool = NULL;
  *  - Otherwise, return non-zero value.
  */
 int buf_init(int buf_num){
-	// Initialize the previous buffer pool.
-	buf_free();
-
 	buffer_frame_t* temp, *front = NULL;
 	
 	if(buf_num < 0)
@@ -44,49 +46,48 @@ int buf_init(int buf_num){
 			// Not Enough Memory
 			exit(-1);
 		}
-		if(front == NULL){
-			front = temp;
-		}
 
 		// Allocate new buffer frames into the buffer pool.
 		temp->table_id = 0; // 0 means no table id
-		temp->pgnum = -1; // initially no page
+		temp->pgnum = 0; // initially no page
 		temp->dirty = false; // initially clean
 		temp->pin_cnt = 0; // initially not used
 
-		temp->prev = pool;
-		temp->prev->next = temp;
-		pool = temp;
+		if(front == NULL){
+			front = temp;
+			pool = front;
+		}else{
+			temp->prev = pool;
+			temp->prev->next = temp;
+			pool = temp;
+		}
 	}
 
 	temp->next = front;
-	front->prev = temp;
+	temp->next->prev = temp;
 
 	// Initialization is finished.
 	if(!initialized){
 		initialized = true;
 	}
 
-	return 0;
+	return SUCCESS;
 }
 
 /*
  *  Get the buffer control block from the buffer pool.
  */
-buffer_frame_t* dest buf_get_frame(int table_id, pagenum_t pagenum){
+buffer_frame_t* buf_get_frame(int table_id, pagenum_t pagenum) {
 	if(!initialized)
-		return;
+		return NULL;
 
-	buffer_frame_t* p;
-
-	p = pool->next;
+	buffer_frame_t* p = pool->next;
 	
 	/* 
-	 * If there is the requested page on the buffer, 
-	 * return it.
+	 * If there is the requested page on the buffer, return it.
 	 */
 	while(p != NULL){
-		if(p->table_id == table_id && p->pgnum == pagenum){
+		if(p->table_id && p->table_id == table_id && p->pgnum == pagenum){
 			/* Pinned */
 			++p->pin_cnt;
 			return p;
@@ -101,31 +102,30 @@ buffer_frame_t* dest buf_get_frame(int table_id, pagenum_t pagenum){
 
 	/* Find an unpinned frame that can be used for replacement */
 	while(p != NULL){
-		if(p->pin_cnt == 0)
-			break;
-		p = p->prev;
-		if(p==pool)
-			return NULL; // No frame can be evicted.
-	}
+		if(p->pin_cnt == 0){
+			// Find a candidate for replacement
+			
+			/* Pinned */
+			++p->pin_cnt;
 
-	/* Pinned */
-	++p->pin_cnt;
+			break;
+		}
+		p = p->prev;
+		if(p==pool){
+			// No frame can be evicted.
+			return NULL;
+		}
+	}	
 
 	// If the page is dirty,
-	if(p->dirty){
-		// Flush it and make it clean
-		file_write_page(p->table_id, p->pgnum, p->frame);
-		p->dirty = false;
-	}
-
-	// Replace this page
+	buf_flush_frame(p);
 
 	// Refill the page metadata
 	p->table_id = table_id;
 	p->pgnum = pagenum;
 
 	// Read the page
-	file_read_page(p->table_id, p->pgnum, p->frame);
+	file_read_page(p->table_id, p->pgnum, &p->frame);
 
 	return p;
 }
@@ -134,45 +134,122 @@ buffer_frame_t* dest buf_get_frame(int table_id, pagenum_t pagenum){
  *  Put the buffer block back to the buffer pool.
  */
 void buf_put_frame(buffer_frame_t* src) {
-	// If the buffer pool is not initialized,
 	if(!initialized)
-		return; // return.
+		return;
 
-	buffer_frame_t* p = pool;
+	if(src == NULL)
+		return;
 
-	while(true){
-		p = p->next;
-		if(p == src)
-			break;
-		if(p == pool)
-			return;
-	}
-
-	/* Put it at the front of the list. */
-	p->prev->next = p->next;
-	p->next->prev = p->prev;
-	p->prev = pool;
-	p->next = pool->next;
-	p->prev->next = p;
-	p->next->prev = p;
+	putAtFront(src);
 
 	/* Unpinned */
-	--p->pin_cnt;
+	--src->pin_cnt;
 }
 
 /*
- *  Flush and Sync the buffer and exit.
+ *  Get the page and set whether this block gets dirty.
  */
-void buf_flush (int table_id){
-	if(IS_TABLE){
+page_t* buf_get_page(buffer_frame_t* frame, bool dirty){
+	if(!frame)
+		return NULL;
+	frame->dirty |= dirty;
+	return &frame->frame;
+}
 
+/*
+ *  Flush the buffers of the given table and clear them.
+ */
+void buf_close_table(int table_id){
+	if(!initialized)
+		return;
+
+	buffer_frame_t* p = pool;
+	while(p != NULL){
+		if(p->table_id && p->table_id == table_id){
+			// If the page is dirty,
+			buf_close_frame(p);
+		}
+
+		p = p->prev;
+		if(p == pool)
+			break;
 	}
 }
 
 /*
- *  Free an buffer block and link it to the free page list.
+ *  Flush the specific buffer and clear it.
  */
-int buf_free(void){
+void buf_close_frame(buffer_frame_t* frame){
+	if(!initialized)
+		return;
+
+	if(frame == NULL)
+		return;
+
+	while(frame->pin_cnt);
+
+	buf_flush_frame(frame);
+
+	CLEAR(&frame->frame);
+	frame->table_id = 0;
+	frame->pgnum = 0;
+}
+
+/*
+ *  Flush the buffers of the given table.
+ */
+void buf_flush_table(int table_id){
+	if(!initialized)
+		return;
+
+	buffer_frame_t* p = pool;
+	while(p != NULL){
+		if(p->table_id && p->table_id == table_id){
+			// If the page is dirty,
+			buf_flush_frame(p);
+		}
+
+		p = p->prev;
+		if(p == pool)
+			break;
+	}
+}
+
+/*
+ *  Flush the specific buffer.
+ */
+void buf_flush_frame(buffer_frame_t* frame){
+	if(!initialized)
+		return;
+
+	if(frame == NULL)
+		return;
+
+	++frame->pin_cnt;
+
+	if(frame->dirty){
+		page_t* page;
+		page = buf_get_page(frame, false);
+		file_write_page(frame->table_id, frame->pgnum, page);
+		frame->dirty = false;
+	}
+
+	--frame->pin_cnt;
+}
+
+/*
+ *  Free it from the disk and the buffer.
+ */
+void buf_free_frame(buffer_frame_t* frame){
+	file_free_page(frame->table_id, frame->pgnum);
+}
+
+/*
+ *  Flush all buffers in the buffer pool and free the pool.
+ */
+void buf_shutdown(void){
+	int i;
+
 	if(pool){
 		buffer_frame_t* it, *next;
 		
@@ -180,31 +257,12 @@ int buf_free(void){
 		next = it->next;
 
 		while(next != pool){
+			buf_flush_frame(it);
 			FRAME_FREE(it);
 			it = next;
 			next = it->next;
 		}
 
 		pool = NULL;
-	}
-}
-
-/*
- *  Read an on-disk page into the in-memory page structure(dest)
- */
-void file_read_page(int table_id, pagenum_t pagenum, page_t* dest){
-	if(IS_VALID_TID(table_id)){
-		SEEK(table_id, OFFSET(pagenum));
-	    READ(table_id, dest);
-    }
-}
-
-/*
- *  Write an in-memory page(src) to the on-disk page
- */
-void file_write_page(int table_id, pagenum_t pagenum, const page_t* src){
-	if(IS_VALID_TID(table_id)){
-		SEEK(table_id, OFFSET(pagenum));
-	    WRITE(table_id, src);
 	}
 }

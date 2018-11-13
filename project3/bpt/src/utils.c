@@ -1,5 +1,7 @@
 #include "utils.h"
-#include "file_manager.h"
+
+#include "buffer_manager.h"
+#include "index_and_file_manager.h"
 #include "page_access_manager.h"
 
 #include <stdio.h>
@@ -76,108 +78,140 @@ offset_t dequeue( int *depth ) {
     return ret;
 }
 
-void print_leaves( int table_id, offset_t root ) {
+void print_leaves( int table_id ) {
     int i, num_keys;
-    offset_t c = root;
-    page_t buf;
-    if (root == HEADER_PAGE_OFFSET) {
+    offset_t c;
+
+    buffer_frame_t *buf_header = buf_get_frame(table_id, HEADER_PAGE_NUM);
+    c = getRootPageOffset(buf_get_page(buf_header, false));
+    buf_put_frame(buf_header);
+
+    if (c == HEADER_PAGE_OFFSET) {
         printf("Empty tree.\n");
         return;
     }
-    file_read_page(table_id, PGNUM(c), &buf);
-    while (!isLeaf(&buf)) {
-        c = getOffset(&buf, 0);
-        file_read_page(table_id, PGNUM(c), &buf);
+    buffer_frame_t *buf = buf_get_frame(table_id, PGNUM(c));
+    page_t *page = buf_get_page(buf, false);
+
+    while (!isLeaf(page)) {
+        c = getOffset(page, 0);
+
+        buf_put_frame(buf);
+        buf = buf_get_frame(table_id, PGNUM(c));
+        page = buf_get_page(buf, false);
     }
     while (true) {
-        for (i = 0, num_keys = getNumOfKeys(&buf); i < num_keys; i++) {
-            printf("%lu ", getKey(&buf, i));
+        for (i = 0, num_keys = getNumOfKeys(page); i < num_keys; i++) {
+            printf("%lu ", getKey(page, i));
         }
-        if (getOffset(&buf, DEFAULT_LEAF_ORDER - 1) != HEADER_PAGE_OFFSET) {
+        if (getOffset(page, DEFAULT_LEAF_ORDER - 1) != HEADER_PAGE_OFFSET) {
             printf(" | ");
-            c = getOffset(&buf, DEFAULT_LEAF_ORDER - 1);
-            file_read_page(table_id, PGNUM(c), &buf);
+            c = getOffset(page, DEFAULT_LEAF_ORDER - 1);
+
+            buf_put_frame(buf);
+            buf = buf_get_frame(table_id, PGNUM(c));
+            page = buf_get_page(buf, false);
         }
         else break;
     }
-    printf("\n");
+    buf_put_frame(buf);
+    printf("\n");    
 }
 
-void print_tree ( int table_id, offset_t root ) {
+void print_tree ( int table_id ) {
     int i = 0, search_level = 0, node_level;
     int num_keys;
+    offset_t root;
 
-    page_t buf;
-    offset_t c;
+    buffer_frame_t *buf_header = buf_get_frame(table_id, HEADER_PAGE_NUM);
+    root = getRootPageOffset(buf_get_page(buf_header, false));
+    buf_put_frame(buf_header);
 
     if (root == HEADER_PAGE_OFFSET) {
         printf("Empty tree.\n");
         return;
     }
+
+    buffer_frame_t *buf;
+    page_t *page;
+    offset_t c;
 
     queue = NULL;
     enqueue(root, search_level);
     while ( queue != NULL ) {
         c = dequeue(&node_level);
-        file_read_page(table_id, PGNUM(c), &buf);
+        buf = buf_get_frame(table_id, PGNUM(c));
+        page = buf_get_page(buf, false);
 
         if (search_level < node_level) {
             puts("");
             search_level = node_level;
         }
 
-        num_keys = getNumOfKeys(&buf);
+        num_keys = getNumOfKeys(page);
         for (i = 0; i < num_keys; i++) {
-            printf("%lu ", getKey(&buf, i));
+            printf("%lu ", getKey(page, i));
         }
-        if (!isLeaf(&buf))
+        if (!isLeaf(page))
             for (i = 0; i <= num_keys; i++)
-                enqueue(getOffset(&buf, i), node_level + 1);
+                enqueue(getOffset(page, i), node_level + 1);
         printf("| ");
+
+        buf_put_frame(buf);
     }
     printf("\n");
 }
 
-int find_range( int table_id, offset_t root, keynum_t key_start, keynum_t key_end, record_t records[] ) {
-    int i, num_found, num_keys;
-    page_t page;
+int find_range( int table_id, keynum_t key_start, keynum_t key_end, record_t records[] ) {
+    buffer_frame_t* buf_header = buf_get_frame(table_id, HEADER_PAGE_NUM);
+    offset_t root = getRootPageOffset(buf_get_page(buf_header, false));
+    buf_put_frame(buf_header);
+
     offset_t p = find_leaf( table_id, root, key_start );
     if (p == HEADER_PAGE_OFFSET)
         return 0;
 
+    int i, num_found, num_keys;
+    buffer_frame_t *buf;
+    page_t *page;
 
-    file_read_page(table_id, PGNUM(p), &page);
+    buf = buf_get_frame(table_id, PGNUM(p));
+    page = buf_get_page(buf, false);
 
-    i = binaryRangeSearch(&page, key_start);
-    num_keys = getNumOfKeys(&page);
+    i = binaryRangeSearch(page, key_start);
+    num_keys = getNumOfKeys(page);
 
     if (i == num_keys)
         return 0;
 
     num_found = 0;
     while (true) {
-        for ( ; i < num_keys && getKey(&page, i) <= key_end; i++) {
-            records[num_found].key = getKey(&page, i);
-            getValue(&page, i, records[num_found].value);
+        for (; i < num_keys && getKey(page, i) <= key_end; i++) {
+            records[num_found].key = getKey(page, i);
+            getValue(page, i, records[num_found].value);
             num_found++;
         }
-        p = getOffset(&page, DEFAULT_LEAF_ORDER - 1);
+        p = getOffset(page, DEFAULT_LEAF_ORDER - 1);
         i = 0;
 
         if (p == HEADER_PAGE_OFFSET)
             break;
 
-        file_read_page(table_id, PGNUM(p), &page);
-        num_keys = getNumOfKeys(&page);
+        buf_put_frame(buf);
+        buf = buf_get_frame(table_id, PGNUM(p));
+        page = buf_get_page(buf, false);
+        num_keys = getNumOfKeys(page);
     }
+    buf_put_frame(buf);
+    
     return num_found;
 }
 
-void find_and_print_range( int table_id, offset_t root, keynum_t key_start, keynum_t key_end) {
+void find_and_print_range( int table_id, keynum_t key_start, keynum_t key_end) {
     int i;
     int array_size = key_end - key_start + 1;
     record_t records[array_size];
-    int num_found = find_range( table_id, root, key_start, key_end, records );
+    int num_found = find_range( table_id, key_start, key_end, records );
     if (!num_found)
         printf("None found.\n");
     else {

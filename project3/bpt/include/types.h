@@ -2,6 +2,7 @@
 #define __TYPES_H__
 
 #include "constants.h"
+#include <assert.h>
 
 // TYPES.
 
@@ -17,6 +18,7 @@ typedef struct header_page_t header_page_t;
 typedef struct free_page_t free_page_t;
 typedef struct node_page_t node_page_t;
 typedef  union page_t page_t;
+typedef struct buffer_frame_t buffer_frame_t;
 
 // Type Definition
 
@@ -89,7 +91,7 @@ union page_t
     node_page_t node_page;
 };
 
-typedef struct buffer_frame_t{
+struct buffer_frame_t{
     /* • Physical frame: containing up to date contents of target page. */
     page_t frame;
     /* • Table id: the unique id of table (per file) */
@@ -101,7 +103,7 @@ typedef struct buffer_frame_t{
     /* • Is pinned: whether this buffer is accessed right now. */
     int pin_cnt;
     /* • LRU list next (prev) : buffer blocks are managed by LRU list. */
-    struct buffer_frame_t next, prev;
+    struct buffer_frame_t *next, *prev;
     /* • Other information can be added with your own buffer manager design. */
     // Empty
 };

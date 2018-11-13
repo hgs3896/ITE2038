@@ -15,9 +15,9 @@ int cut( int length );
 void enqueue( offset_t new_node, int depth );
 offset_t dequeue( int *depth );
 
-void print_leaves( int table_id, offset_t root );
-void print_tree( int table_id, offset_t root );
-int find_range( int table_id, offset_t root, keynum_t key_start, keynum_t key_end, record_t records[] );
-void find_and_print_range( int table_id, offset_t root, keynum_t key_start, keynum_t key_end);
+void print_leaves(int table_id);
+void print_tree(int table_id);
+int find_range(int table_id, keynum_t key_start, keynum_t key_end, record_t records[]);
+void find_and_print_range(int table_id, keynum_t key_start, keynum_t key_end);
 
 #endif
