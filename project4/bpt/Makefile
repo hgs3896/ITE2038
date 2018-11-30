@@ -25,7 +25,7 @@ SRCS_FOR_LIB:=\
 	$(SRCDIR)join.cpp	
 
 OBJS_FOR_LIB:=$(SRCS_FOR_LIB:.cpp=.o)
-CPPFLAGS+= -g -fPIC -I $(INC) -std=c++17 -gdwarf-2
+CPPFLAGS+= -g -fPIC -I $(INC) -std=c++17 
 
 TARGET=main
 

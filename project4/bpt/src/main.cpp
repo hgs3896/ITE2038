@@ -115,6 +115,6 @@ int main( int argc, char ** argv ) {
 		if ( result == std::stoi(query) )
 			++success;
 	}
-	std::cout << success << std::endl;
+	//std::cout << success << std::endl;
 	return EXIT_SUCCESS;
 }
