@@ -25,19 +25,19 @@ private:
 	BufferBlock(int table_id = 0, pagenum_t pgnum = 0);
 public:
 	BufferBlock(const BufferBlock&) = delete;
-	constexpr int getTableID()
+	int getTableID()
 	{
 		return table_id;
 	};
-	constexpr pagenum_t getPageNum()
+	pagenum_t getPageNum()
 	{
 		return pgnum;
 	};
-	constexpr bool isDirty()
+	bool isDirty()
 	{
 		return dirty;
 	};
-	constexpr int countPins()
+	int countPins()
 	{
 		return pin_cnt;
 	};

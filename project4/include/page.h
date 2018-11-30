@@ -57,22 +57,22 @@ public:
 	// for Header Page
 
 	// -> Getters
-	constexpr offset_t getFreePageOffset() const
+	offset_t getFreePageOffset() const
 	{
 		return free_page_offset;
 	};
 
-	constexpr offset_t getRootPageOffset() const
+	offset_t getRootPageOffset() const
 	{
 		return root_page_offset;
 	};
 
-	constexpr pagenum_t getNumOfPages() const
+	pagenum_t getNumOfPages() const
 	{
 		return num_of_pages;
 	}
 
-	constexpr pagenum_t getNumOfColumns() const
+	pagenum_t getNumOfColumns() const
 	{
 		return num_of_columns;
 	}
@@ -86,9 +86,9 @@ public:
 	// for Free Page
 
 	// -> Getters
-	constexpr offset_t getNextFreePageOffset() const
+	offset_t getNextFreePageOffset() const
 	{
-		return this->next_free_page_offset;
+		return next_free_page_offset;
 	};
 
 	// -> Setters
@@ -97,38 +97,38 @@ public:
 	// for Node Page
 
 	// -> Getters
-	constexpr offset_t getParentOffset() const
+	offset_t getParentOffset() const
 	{
 		return offset;
 	};
-	constexpr bool isLeaf() const
+	bool isLeaf() const
 	{
 		return isLeafNode;
 	};
-	constexpr int getNumOfKeys() const
+	int getNumOfKeys() const
 	{
 		return num_keys;
 	};
-	constexpr record_key_t getKey(key_idx_t index) const
+	record_key_t getKey(key_idx_t index) const
 	{
 		return !isLeaf() ?
-			// Internal Page : 0 ¡Â index < DEFAULT_INTERNAL_ORDER - 1
+			// Internal Page : 0 â‰¤ index < DEFAULT_INTERNAL_ORDER - 1
 			index >= DEFAULT_INTERNAL_ORDER - 1 ? INVALID_INDEX : this->pairs[index].key :
-			// Leaf Page : 0 ¡Â index < DEFAULT_LEAF_ORDER - 1
+			// Leaf Page : 0 â‰¤ index < DEFAULT_LEAF_ORDER - 1
 			index >= DEFAULT_LEAF_ORDER - 1 ? INVALID_INDEX : this->records[index].key;
 	};
-	constexpr offset_t getOffset(key_idx_t index) const
+	offset_t getOffset(key_idx_t index) const
 	{
 		return !isLeaf() ?
-			// Internal Page : 0 ¡Â index < DEFAULT_INTERNAL_ORDER
+			// Internal Page : 0 â‰¤ index < DEFAULT_INTERNAL_ORDER
 			index >= DEFAULT_INTERNAL_ORDER | index < 0 ? INVALID_INDEX :
 			index == 0 ? this->one_more_page_offset : this->pairs[index - 1].offset :
 			// Leaf Page : index = DEFAULT_LEAF_ORDER - 1
 			index == DEFAULT_LEAF_ORDER - 1 ? this->right_sibling_page_offset : INVALID_INDEX;
 	};
-	constexpr int getValues(key_idx_t index, record_val_t *dest, int num_column = 0) const
+	int getValues(key_idx_t index, record_val_t *dest, int num_column = 0) const
 	{
-		// Leaf Page : 0 ¡Â index < DEFAULT_LEAF_ORDER - 1
+		// Leaf Page : 0 â‰¤ index < DEFAULT_LEAF_ORDER - 1
 		return isLeaf() ?
 			index >= DEFAULT_LEAF_ORDER - 1 ? INVALID_INDEX
 			: (std::memcpy(dest, this->records[index].values, num_column * sizeof(record_val_t)), SUCCESS) :
