@@ -2,6 +2,9 @@
 #include "wrapper_funcs.h"
 #include "buffer_manager.h"
 
+// Maximum Threads
+static const unsigned int nThreads = std::thread::hardware_concurrency();
+
 // Table
 
 Table::Table()
@@ -173,21 +176,40 @@ void SumOperator::execute()
 {
 	if ( auto join = dynamic_cast<JoinOperator*>(op) )
 	{
-		// Á¶ÀÎ Å°ÀÇ ÇÕÀ» °è»êÇÑ´Ù.
+		// ì¡°ì¸ í‚¤ì˜ í•©ì„ ê³„ì‚°í•œë‹¤.
 		join->execute();
 		table = std::move(join->getTable());
 		auto joinList = std::move(join->getJoinList());
+
 		std::vector<int> keySet;
 		for ( const auto& tb : table.info )
 			keySet.emplace_back(table.info[tb.first][1]);
 
-		for ( const auto& record : table.records )
-		{
-			for ( const auto idx : keySet )
+		std::atomic<record_val_t> sum;
+		sum.store(0);
+
+		auto sumFunc = [this, &keySet, &sum](int threadNum) {
+			for ( auto i = threadNum; i < table.records.size(); i += nThreads )
 			{
-				sum += record[idx];
-			}				
+				for ( const auto idx : keySet )
+				{
+					sum.fetch_add(table.records[i][idx], std::memory_order_relaxed);
+				}
+			}
+		};
+		
+		std::vector<std::thread> sumThreads;
+		for ( auto i = 0; i < nThreads; ++i )
+		{
+			sumThreads.emplace_back(std::thread { sumFunc, i });
 		}
+
+		for ( auto& eachThread : sumThreads )
+		{
+			eachThread.join();
+		}
+
+		this->sum = sum;
 	}
 }
 
@@ -256,7 +278,7 @@ void JoinOperator::addJoinInfo(JoinInfo joinInfo)
 
 void JoinOperator::execute()
 {
-	// Hash JoinÀ¸·Î ½ÇÇà
+	// Hash Joinìœ¼ë¡œ ì‹¤í–‰
 }
 
 JoinOperator::~JoinOperator()
@@ -300,6 +322,25 @@ void HashJoinOperator::execute()
 	auto t1 = left->getTable();
 	auto t2 = right->getTable();
 
+	// Table Info
+	table.totalCol = t1.totalCol + t2.totalCol;
+	table.info.insert(t1.info.cbegin(), t1.info.cend());
+	table.info.insert(t2.info.cbegin(), t2.info.cend());
+	for ( auto tit = t2.info.cbegin(); tit != t2.info.cend(); ++tit )
+	{
+		for ( auto cit = tit->second.cbegin(); cit != tit->second.cend(); ++cit )
+		{
+			table.info[tit->first][cit->first] += t1.totalCol;
+		}
+	}
+	
+	// Join Info
+	auto joinInfo = *joinList.cbegin();
+
+	// Join Key Info
+	const auto idx_1 = t1.info[joinInfo.tid1][joinInfo.key1];
+	const auto idx_2 = t2.info[joinInfo.tid2][joinInfo.key2];
+
 	if ( auto join1 = dynamic_cast<JoinOperator*>(left) )
 	{
 		auto list = join1->getJoinList();
@@ -312,11 +353,6 @@ void HashJoinOperator::execute()
 		joinList.insert_after(joinList.begin(), list.begin(), list.end());
 	}
 
-	auto joinInfo = *joinList.cbegin();
-
-	const auto idx_1 = t1.info[joinInfo.tid1][joinInfo.key1];
-	const auto idx_2 = t2.info[joinInfo.tid2][joinInfo.key2];
-
 	auto hashing = [](const int idx, const Table::Records& records, HashJoinOperator::HashTable& hashTable) {
 		for ( const auto& record : records )
 		{
@@ -324,18 +360,7 @@ void HashJoinOperator::execute()
 		}
 	};
 
-	auto matching = [this, &t1 = t1, &t2 = t2, &ht1 = hashTable1, &ht2 = hashTable2, idx_1, idx_2]() {
-		table.totalCol = t1.totalCol + t2.totalCol;
-		table.info.insert(t1.info.cbegin(), t1.info.cend());
-		table.info.insert(t2.info.cbegin(), t2.info.cend());
-		for ( auto tit = t2.info.cbegin(); tit != t2.info.cend(); ++tit )
-		{
-			for ( auto cit = tit->second.cbegin(); cit != tit->second.cend(); ++cit )
-			{
-				table.info[tit->first][cit->first] += t1.totalCol;
-			}
-		}
-
+	auto matching = [this, &ht1 = hashTable1, &ht2 = hashTable2, idx_1, idx_2]() {
 		for ( const auto& left : ht1)
 		{
 			if ( ht2.count(left.first) )
@@ -353,13 +378,11 @@ void HashJoinOperator::execute()
 			}
 		}
 	};
-	
+
 	std::thread th1 = std::thread(hashing, idx_1, std::ref(t1.records), std::ref(hashTable1));
 	std::thread th2 = std::thread(hashing, idx_2, std::ref(t2.records), std::ref(hashTable2));
-
 	th1.join();
 	th2.join();
-
 	std::thread th3 = std::thread(matching);
 	th3.join();
 }
@@ -451,7 +474,7 @@ ParseTree::~ParseTree()
 	delete op;
 }
 
-TableStat::Dist TableStat::dist(DEFAULT_SIZE_OF_TABLES);
+TableStat::Dist TableStat::dist;
 
 void TableStat::analyze(Table::ID tableID){
 	auto next = HEADER_PAGE_OFFSET;
@@ -533,9 +556,9 @@ std::size_t TableStat::getInverseOfReductionFactor(JoinInfo joinInfo)
 
 	size_t cnt_1 = 0, cnt_2 = 0;
 	
-	auto counting = [&dist](size_t& cnt, int tid, int col, auto min, auto max) {
-		auto it = dist[tid][col].find(min);
-		auto last_it = dist[tid][col].find(max);
+	auto counting = [](size_t& cnt, int tid, int col, auto min, auto max) {
+		auto it = TableStat::dist[tid][col].find(min);
+		auto last_it = TableStat::dist[tid][col].find(max);
 		do
 		{
 			cnt += it->second;
