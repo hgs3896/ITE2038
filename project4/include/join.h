@@ -8,6 +8,8 @@
 #include <set>
 #include <queue>
 #include <map>
+#include <atomic>
+#include <mutex>
 #include <unordered_map>
 #include <initializer_list>
 #include <vector>
@@ -34,11 +36,11 @@ struct Table
 	using Record = std::vector<record_val_t>;
 	using Records = std::vector<Record>;
 	
-	// ÀüÃ¼ ÄÃ·³ °³¼ö
+	// ì „ì²´ ì»¬ëŸ¼ ê°œìˆ˜
 	int totalCol;
-	// info[tid][col] = tidÀÇ colÀÇ physical index
+	// info[tid][col] = tidì˜ colì˜ physical index
 	Info info;
-	// records[info[tid][col]] = tidÀÇ colÀÇ ·¹ÄÚµå
+	// records[info[tid][col]] = tidì˜ colì˜ ë ˆì½”ë“œ
 	Records records;
 
 	Table();
@@ -102,8 +104,8 @@ public:
 	{
 		/* Join Information
 		 * {
-		 *   { t1ÀÇ table id, t1 join keyÀÇ index }
-		 *   { t2ÀÇ table id, t2 join keyÀÇ index }
+		 *   { t1ì˜ table id, t1 join keyì˜ index }
+		 *   { t2ì˜ table id, t2 join keyì˜ index }
 		 * }
 		 */
 		int tid1, tid2, key1, key2, rrf;
@@ -156,7 +158,7 @@ public:
 
 class TableStat {
 public:
-	// dist[tableID][colNum][key] == ÇØ´ç keyÀÇ °³¼ö
+	// dist[tableID][colNum][key] == í•´ë‹¹ keyì˜ ê°œìˆ˜
 	using ColumnDist = std::map<record_val_t, size_t>;
 	using TableDist = std::unordered_map<Table::Col, ColumnDist>;
 	using Dist = std::unordered_map<Table::ID, TableDist>;
