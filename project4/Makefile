@@ -1,5 +1,6 @@
 .SUFFIXES: .cpp .o
 CC=g++
+ARFLAGS += rcs
 
 SRCDIR=src/
 INC=include/
@@ -42,4 +43,4 @@ library:
 	$(CC) -shared -Wl,-soname,libbpt.so -o $(LIBS)libbpt.so $(OBJS_FOR_LIB)
 
 static_library:
-	ar rcus $(LIBS)libbpt.a $(OBJS_FOR_LIB)
+	$(AR) $(LIBS)libbpt.a $(OBJS_FOR_LIB)
