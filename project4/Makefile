@@ -43,4 +43,4 @@ library:
 	$(CC) -shared -Wl,-soname,libbpt.so -o $(LIBS)libbpt.so $(OBJS_FOR_LIB)
 
 static_library:
-	$(AR) $(LIBS)libbpt.a $(OBJS_FOR_LIB)
+	$(AR) $(ARFLAGS) $(LIBS)libbpt.a $(OBJS_FOR_LIB)
