@@ -1,4 +1,9 @@
 language: cpp
-compiler: gcc
+compiler:
+- gcc
 os:
 - linux
+install:
+- if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd project2 && make; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd project3 && make; fi
+- if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd project4 && make; fi
