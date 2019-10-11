@@ -3,5 +3,5 @@ compiler:
 - gcc
 os:
 - linux
-install:
+script:
 - if [ $TRAVIS_OS_NAME == linux ]; then cd project4 && make && cd -; fi
