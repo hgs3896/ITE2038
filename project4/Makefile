@@ -1,6 +1,6 @@
 .SUFFIXES: .cpp .o
 CC=g++
-ARFLAGS=rcs
+ARFLAGS=rcus
 
 SRCDIR=src/
 INC=include/
