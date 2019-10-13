@@ -1,0 +1,17 @@
+version: 0.1 ({build})
+image:
+  - gcc
+
+platform:
+  - x64
+
+matrix:
+  fast_finish: true
+
+configuration:
+  - Release
+  
+install:
+  - git clone https://github.com/hgs3896/ITE2038
+  - cd ITE2038/project4
+  - make
