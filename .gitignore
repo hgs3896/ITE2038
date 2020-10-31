@@ -1,0 +1,3 @@
+project[1-9]/lib
+project[1-9]/main
+project[1-9]/src/*.o
