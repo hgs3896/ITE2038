@@ -1,6 +1,7 @@
 ﻿#ifndef __BUFFER_MANAGER_H__
 #define __BUFFER_MANAGER_H__
 
+#include "common.h"
 #include "page.h"
 
 class BufferBlock

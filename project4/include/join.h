@@ -1,20 +1,8 @@
 #ifndef __JOIN_H__
 #define __JOIN_H__
 
+#include "common.h"
 #include "types.h"
-#include <array>
-#include <string>
-#include <forward_list>
-#include <set>
-#include <queue>
-#include <map>
-#include <atomic>
-#include <mutex>
-#include <unordered_map>
-#include <initializer_list>
-#include <vector>
-#include <algorithm>
-#include <thread>
 
 class Operator;
 class SumOperator;

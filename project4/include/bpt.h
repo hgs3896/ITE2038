@@ -3,6 +3,7 @@
 
 #define Version "1.05"
 
+#include "common.h"
 #include "utils.h"
 #include "wrapper_funcs.h"
 

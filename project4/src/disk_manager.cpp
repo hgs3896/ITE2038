@@ -10,14 +10,6 @@
 #include <unistd.h> /* open, close, lseek */
 #include <sys/stat.h> /* system constants */
 
-#define READ(tid, buf) (read(fds[(tid)-1], (buf), PAGESIZE))
-#define WRITE(tid, buf) (write(fds[(tid)-1], (buf), PAGESIZE))
-#define CLOSE(tid) (close(fds[tid-1]))
-#define SEEK(tid, offset) (lseek(fds[(tid)-1], (offset), SEEK_SET) >= 0)
-#define FD(tid) *(&fds[(tid)-1])
-#define NUM_COL(tid) *(&num_cols[(tid)-1])
-#define IS_TID_OPEN(tid) (fds[(tid)-1] != 0)
-
 /*
  * For automatic DB shutdown
  */
@@ -28,6 +20,37 @@ static bool initialized = false;
  */
 static int fds[DEFAULT_SIZE_OF_TABLES];
 static int num_cols[DEFAULT_SIZE_OF_TABLES];
+
+inline bool READ(int tid, void* buf)
+{
+    return read(fds[tid-1], (buf), PAGESIZE);
+}
+ 
+inline bool WRITE(int tid, const void* buf)
+{
+    return write(fds[tid-1], (buf), PAGESIZE);
+}
+inline bool CLOSE(int tid)
+{
+    return close(fds[tid-1]);
+}
+
+inline bool SEEK(int tid, offset_t offset){
+    return lseek(fds[tid-1], (offset), SEEK_SET) >= 0;
+}
+
+inline int& FD(int tid) {
+    return fds[tid-1];
+}
+
+inline int& NUM_COL(int tid) 
+{
+    return num_cols[tid-1];
+}
+
+inline bool IS_TID_OPEN(int tid) {
+    return fds[(tid)-1] != 0;
+}
 
 /*
  *  Read an on-disk page into the in-memory page structure(dest)

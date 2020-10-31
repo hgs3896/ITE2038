@@ -1,9 +1,8 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
+#include "common.h"
 #include "constants.h"
-#include <cassert>
-#include <iostream>
 
 // TYPES.
 
@@ -35,5 +34,13 @@ struct key_pair
 class Page;
 
 std::ostream& operator<<(std::ostream& os, const record_t& record);
+
+constexpr inline offset_t OFFSET(pagenum_t pagenum){
+    return pagenum * PAGESIZE;
+}
+
+constexpr inline pagenum_t PGNUM(offset_t pageoffset){
+    return pageoffset / PAGESIZE;
+}
 
 #endif

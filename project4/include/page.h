@@ -1,9 +1,8 @@
 #ifndef __PAGE_H__
 #define __PAGE_H__
 
+#include "common.h"
 #include "types.h"
-#include <vector>
-#include <cstring>
 
 // Universal Page Layout
 class Page
